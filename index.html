@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#111b1a" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23192c26'/%3E%3Cpath d='M16 45V19h7v26m9 0V13h7v32m9 0V22h7v23' stroke='%23ecc38a' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <title>Klung! — Play the melody together</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+<div id="app">
+  <header class="global-header">
+    <div class="identity">
+      <div class="brand-symbol" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="brand-lockup"><strong>Klung<span class="brand-period">!</span></strong></div>
+    </div>
+    <div class="header-right"><button id="fullscreen" class="outline" type="button" aria-label="Toggle fullscreen"><span class="fullscreen-glyph">⛶</span> <span class="fullscreen-label">FULLSCREEN</span></button></div>
+  </header>
+
+  <main>
+    <section class="stage" id="stage" aria-label="Falling notes performance stage">
+      <div class="stage-top">
+        <div class="stage-section"><span class="live-dot" aria-hidden="true"></span> LIVE</div>
+        <div class="song"><div id="songTitle">Klung!</div><span id="songSubtitle"></span></div>
+        <div class="pitch-range"><b>C1 <i>—</i> B1</b></div>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="stageCanvas" aria-label="Seven white-note lanes from C through B with chromatic black notes"></canvas>
+        <div class="stage-watermark" aria-hidden="true">KLUNG!</div>
+        <div class="empty" id="empty">
+          <div class="empty-motif" aria-hidden="true"><div class="petal p1"></div><div class="petal p2"></div><div class="petal p3"></div><div class="petal p4"></div><div class="motif-core"></div></div>
+          <h1>Ready?</h1>
+          <button class="primary" id="centerDemo" type="button">TRY DEMO <span>↗</span></button>
+        </div>
+        <div class="hit-label"><span class="hit-line-sample"></span> HIT</div>
+        <div class="record-hud" id="recordHud" hidden>
+          <span class="record-pulse" aria-hidden="true"></span>
+          <strong id="recordTime">00:00</strong>
+          <div class="record-map" aria-label="Computer keyboard note map">
+            <span><b>WHITE</b><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd></span>
+            <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
+          </div>
+          <button id="stopRecord" class="record-stop" type="button">STOP</button>
+        </div>
+        <div class="live-editor" id="liveEditor" hidden>
+          <button id="editorPlay" class="live-tool live-play" type="button" aria-label="Play or pause">▶</button>
+          <span class="live-selection" id="liveSelection">SELECT A NOTE</span>
+          <select id="editorPitch" class="live-field" disabled aria-label="Note pitch"></select>
+          <label class="live-number" title="Start time"><span>AT</span><input id="editorStart" type="number" min="0" step="0.01" disabled /></label>
+          <label class="live-number" title="Note length"><span>LEN</span><input id="editorLength" type="number" min="0.08" step="0.01" disabled /></label>
+          <button id="editorDelete" class="live-tool live-delete" disabled type="button" title="Delete note" aria-label="Delete selected note">×</button>
+          <span class="live-spacer"></span>
+          <button id="editorCancel" class="live-tool" type="button" title="Cancel edits">CANCEL</button>
+          <button id="editorSave" class="live-tool live-save" type="button" title="Save edits">DONE</button>
+        </div>
+      </div>
+      <div class="keys" id="piano" aria-label="Chromatic piano keyboard C1 through B1"></div>
+      <div class="stage-bottom"><div class="key-guide"><span class="rainbow-swatch"></span></div><div class="stage-credit">KLUNG!</div></div>
+    </section>
+
+    <aside class="control-panel">
+      <div class="panel-heading"><h2>Controls</h2></div>
+      <div class="panel-body">
+        <div class="section-heading"><strong>SONG</strong></div>
+        <label class="upload" id="dropZone">
+          <input id="file" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.mid,.midi,.json,.klung" hidden />
+          <span class="upload-symbol" aria-hidden="true">↑</span>
+          <strong>Choose a song</strong>
+          <span class="upload-types">M4A · MP3 · WAV · MIDI · KLUNG</span>
+        </label>
+        <button class="demo-btn" id="demo" type="button"><span class="sample-icon">♫</span><span>Demo</span><span class="button-arrow">↗</span></button>
+        <button class="record-btn" id="record" type="button" aria-pressed="false"><span class="record-button-dot" aria-hidden="true"></span><span id="recordLabel">Record</span><span class="record-key-hint">KEYS</span></button>
+        <div class="control-rule"></div>
+        <div class="section-heading"><strong>PLAY</strong></div>
+        <div class="transport"><button id="play" class="play" disabled type="button" aria-label="Play or pause">▶</button><button id="restart" class="icon-btn" disabled title="Restart" aria-label="Restart" type="button">↺</button><div class="clock"><strong id="clock">00:00</strong><span id="duration">/ 00:00</span></div></div>
+        <input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="Playback position" />
+        <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Mute the original song and hear notes only"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Song on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
+        <div class="setting"><div><strong>Speed</strong></div><b id="leadText">3.0s</b></div>
+        <input id="lead" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="Note travel time" />
+        <div class="setting"><div><strong>Volume</strong></div><b id="volText">70%</b></div>
+        <input id="volume" type="range" min="0" max="1" step="0.05" value="0.7" aria-label="Volume" />
+        <div class="control-rule"></div>
+        <div class="section-heading"><strong>STATUS</strong></div>
+        <p class="info" id="info" role="status">Choose a song.</p>
+        <div class="meter" aria-hidden="true"><div id="meterBar"></div></div>
+        <div class="stats"><div><b id="noteCount">—</b><small>NOTES</small></div><div class="secondary-stat"><b id="rangeCount">—</b><small>READY</small></div></div>
+        <div class="section-heading editor-section-heading"><strong>EDIT</strong></div>
+        <div class="project-actions">
+          <button class="edit-notes" id="editNotes" disabled type="button"><span>✦</span> EDIT</button>
+          <button class="export" id="export" disabled type="button"><span>↓</span> SAVE</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <audio id="audio" preload="metadata"></audio>
+</div>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>
