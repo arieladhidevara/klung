@@ -1,5 +1,19 @@
 {
-  "name":"klung","version":"1.0.0","private":true,"type":"module",
-  "scripts":{"postinstall":"node scripts/copy-model.mjs","dev":"vite --host 0.0.0.0","build":"vite build","preview":"vite preview --host 0.0.0.0"},
-  "dependencies":{"@spotify/basic-pitch":"1.0.1","@tonejs/midi":"^2.0.28","vite":"^6.3.5"}
+  "name": "klung",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "postinstall": "node scripts/copy-model.mjs",
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0"
+  },
+  "dependencies": {
+    "@spotify/basic-pitch": "1.0.1",
+    "@tonejs/midi": "^2.0.28",
+    "qrcode": "^1.5.4",
+    "trystero": "^0.26.0",
+    "vite": "^6.3.5"
+  }
 }

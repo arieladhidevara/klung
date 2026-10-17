@@ -51,7 +51,16 @@
           <select id="editorPitch" class="live-field" disabled aria-label="Note pitch"></select>
           <label class="live-number" title="Start time"><span>AT</span><input id="editorStart" type="number" min="0" step="0.01" disabled /></label>
           <label class="live-number" title="Note length"><span>LEN</span><input id="editorLength" type="number" min="0.08" step="0.01" disabled /></label>
+          <button id="editorCopy" class="live-tool" disabled type="button" title="Copy selected note (Ctrl/Cmd+C)">COPY</button>
+          <button id="editorPaste" class="live-tool" disabled type="button" title="Paste note (Ctrl/Cmd+V)">PASTE</button>
           <button id="editorDelete" class="live-tool live-delete" disabled type="button" title="Delete note" aria-label="Delete selected note">×</button>
+          <label class="backing-upload live-tool" title="Upload an audio or video file; only its audio will be used">
+            <input id="backingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden />
+            + BACKING
+          </label>
+          <span id="backingName" class="backing-name">NO BACKING</span>
+          <label class="live-number backing-offset" title="Backing track start on the note timeline"><span>OFFSET</span><input id="backingOffset" type="number" step="0.05" value="0" aria-label="Backing track offset in seconds" /></label>
+          <button id="backingRemove" class="live-tool backing-remove" disabled type="button" title="Remove backing track">REMOVE</button>
           <span class="live-spacer"></span>
           <button id="editorCancel" class="live-tool" type="button" title="Cancel edits">CANCEL</button>
           <button id="editorSave" class="live-tool live-save" type="button" title="Save edits">DONE</button>
@@ -90,12 +99,48 @@
         <div class="section-heading editor-section-heading"><strong>EDIT</strong></div>
         <div class="project-actions">
           <button class="edit-notes" id="editNotes" disabled type="button"><span>✦</span> EDIT</button>
-          <button class="export" id="export" disabled type="button"><span>↓</span> SAVE</button>
+          <button class="export" id="export" disabled type="button"><span>↓</span> PROJECT</button>
+          <button class="export session-export" id="saveSession" disabled type="button"><span>⬡</span> SESSION</button>
+          <button class="export video-export" id="exportVideo" disabled type="button"><span>▶</span> VIDEO</button>
+          <button class="export live-session-button" id="hostSession" disabled type="button"><span>⌁</span> MOBILE</button>
         </div>
       </div>
     </aside>
   </main>
+  <div class="live-session-modal" id="liveSessionModal" hidden role="dialog" aria-modal="true" aria-labelledby="liveSessionTitle">
+    <div class="live-session-card">
+      <button id="liveSessionClose" class="live-session-close" type="button" aria-label="Close">×</button>
+      <span class="live-session-kicker">MASTER SESSION</span>
+      <h2 id="liveSessionTitle">Scan to join</h2>
+      <p>Players scan this QR, choose one or more notes, then wait for the master.</p>
+      <canvas id="liveSessionQr" width="260" height="260" aria-label="Mobile join QR code"></canvas>
+      <strong id="liveSessionCode" class="live-session-code">—— ——</strong>
+      <div class="live-session-link-row"><input id="liveSessionLink" readonly aria-label="Mobile join link" /><button id="liveSessionCopy" type="button">COPY</button></div>
+      <div class="live-player-summary"><span>PLAYERS</span><b id="livePlayerCount">0 connected</b></div>
+      <div id="livePlayerList" class="live-player-list"><small>Waiting for players…</small></div>
+      <div class="live-session-actions"><button id="liveSessionEnd" class="live-session-end" type="button">END SESSION</button><button id="liveSessionPlay" class="live-session-play" type="button">PLAY FOR EVERYONE</button></div>
+    </div>
+  </div>
+  <section class="mobile-player" id="mobilePlayer" hidden aria-live="polite">
+    <div class="mobile-connect" id="mobileConnect">
+      <span class="mobile-brand">KLUNG!</span>
+      <div class="mobile-signal" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h1 id="mobileConnectTitle">Connecting to master…</h1>
+      <p id="mobileConnectText">Keep this screen open.</p>
+    </div>
+    <div class="mobile-note-picker" id="mobileNotePicker" hidden>
+      <span class="mobile-brand">KLUNG!</span>
+      <h1>Lu mainin note apa?</h1>
+      <p>Pilih satu atau lebih.</p>
+      <div id="mobileNoteChoices" class="mobile-note-choices"></div>
+      <button id="mobileReady" type="button" disabled>READY</button>
+    </div>
+    <div class="mobile-cue" id="mobileCue" hidden>
+      <div class="mobile-cue-status"><span id="mobileCueDot"></span><strong id="mobileCueStatus">WAITING FOR MASTER</strong></div>
+    </div>
+  </section>
   <audio id="audio" preload="metadata"></audio>
+  <audio id="backingAudio" preload="metadata"></audio>
 </div>
 <script type="module" src="/src/main.js"></script>
 </body>
