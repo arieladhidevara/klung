@@ -70,13 +70,15 @@
               <button id="backingNudgeBack" class="live-tool backing-nudge" type="button" title="Move backsound 0.10 seconds earlier">−0.10</button>
               <label class="live-number backing-offset" title="Backsound start on the note timeline"><span>START</span><input id="backingOffset" type="number" step="0.05" value="0" aria-label="Backsound start time in seconds" /></label>
               <button id="backingNudgeForward" class="live-tool backing-nudge" type="button" title="Move backsound 0.10 seconds later">+0.10</button>
+              <label class="live-number backing-length" title="Backsound length on the timeline"><span>LEN</span><input id="backingLength" type="number" min="0.25" step="0.05" value="0" aria-label="Backsound timeline length in seconds" /></label>
+              <button id="backingResetSize" class="live-tool backing-nudge" type="button" title="Restore the backsound's original length">1:1</button>
               <button id="backingRemove" class="live-tool backing-remove" disabled type="button" title="Remove backsound">REMOVE</button>
               <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Turn uploaded music on or off"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Music on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
             </div>
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Drag the backsound bar to align its start. Drag a note to change its pitch and timing.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+            <footer class="arrangement-footer"><span>Drag bars to move them. Drag either note edge—or the backsound's right edge—to resize.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
           </div>
         </div>
       </div>

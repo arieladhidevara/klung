@@ -9,7 +9,8 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 - Record a melody from the computer keyboard. Use `A S D F G H J` for white notes and `W E T Y U` for black notes; holding a key creates one longer note.
 - Open the arrangement popup to play, select, move, copy, paste, or delete notes while comparing them with a separate backsound track.
 - Scroll up/down in the arrangement timeline to scrub backward/forward.
-- Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track or use the start/nudge controls to align it with the notes.
+- Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track to align it, resize its right edge to time-stretch it, or use the precise start/length controls.
+- Resize a selected note from either edge in the arrangement timeline, or enter its exact start and length values.
 - Export a 720p performance video with the notes, keyboard, source/backing audio, and synthesized note cues. The recording starts as the first falling note enters the stage.
 - Save one portable `.klung-project.json` containing notes, source audio/video, backsound audio/video, offsets, mute state, speed, and volume.
 - Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, see the shared falling-note timeline, then get a full-screen color and **Klung!** cue on their turn.
