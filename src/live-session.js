@@ -50,7 +50,7 @@ export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPla
 
   function sendState(target){safeSend(stateAction,{...getSnapshot(),sentAt:Date.now()},target)}
   function renderMasterPlayers(){
-    const list=$('#livePlayerList'),ready=[...peers.values()].filter(player=>player.ready).length;$('#livePlayerCount').textContent=`${peers.size} connected · ${ready} ready`;$('#liveSessionPlay').disabled=!peers.size||ready!==peers.size;
+    const list=$('#livePlayerList'),ready=[...peers.values()].filter(player=>player.ready).length;$('#livePlayerCount').textContent=`${peers.size} connected · ${ready} ready`;$('#liveSessionPlay').disabled=false;
     if(!peers.size){list.innerHTML='<small>Waiting for players…</small>';return}
     list.replaceChildren(...[...peers.values()].map(player=>{const row=document.createElement('div');row.className='live-player-row';const colors=(player.selection||[]).map(pitch=>`<b style="background:${noteColors[pitch%12]}"></b>`).join('');row.innerHTML=`<i></i><strong>Player ${player.number}</strong><small>${player.ready?'READY':'CHOOSING'}</small><span>${colors}${player.selection?.map(pitch=>noteNames[pitch%12]).join(' · ')||''}</span>`;return row}))
   }
@@ -67,8 +67,7 @@ export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPla
   }
 
   function preparePlay(position){
-    if(!room||role!=='master')return null;const ready=[...peers.values()].filter(player=>player.ready).length;
-    if(!peers.size||ready!==peers.size){$('#liveSessionModal').hidden=false;return {blocked:true,message:!peers.size?'Waiting for at least one mobile player.':'Wait until every player has chosen their notes.'}}
+    if(!room||role!=='master'||!peers.size)return null;
     const executeAt=Date.now()+1800,payload={command:'play',position,executeAt,sequence:crypto.randomUUID?.()||String(executeAt)};safeSend(transportAction,payload);return {blocked:false,executeAt};
   }
   function broadcastPause(position){if(room&&role==='master')safeSend(transportAction,{command:'pause',position,masterNow:Date.now()})}

@@ -51,9 +51,9 @@ npm run build
 1. Load or edit a song, then click **MOBILE** on the laptop master.
 2. Players scan the QR code. The production join URL is `https://klung-one.vercel.app/join?session=...`.
 3. Every player chooses one or more notes and taps **READY**.
-4. Once all connected players are ready, press **PLAY FOR EVERYONE** or the main Play button.
+4. Press Play at any time. Connected phones follow the live master automatically; players who finish joining later are synchronized to the master's current position.
 
-The master schedules playback ahead, each phone estimates its clock offset from several round trips, and the master sends periodic timeline corrections during playback. Live rooms use direct, encrypted WebRTC connections with Trystero's public signaling network, so the Vercel deployment does not need a persistent WebSocket server.
+Mobile participation is optional: Play works normally when nobody joins. When phones are connected, the master schedules playback ahead, each phone estimates its clock offset from several round trips, and the master sends periodic timeline corrections during playback. Live rooms use direct, encrypted WebRTC connections with Trystero's public signaling network, so the Vercel deployment does not need a persistent WebSocket server.
 
 Keep the laptop session open while players are connected. A restrictive network may still require TURN configuration; using the same reliable Wi-Fi is recommended for performances.
 
