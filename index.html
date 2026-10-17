@@ -45,25 +45,39 @@
           </div>
           <button id="stopRecord" class="record-stop" type="button">STOP</button>
         </div>
-        <div class="live-editor" id="liveEditor" hidden>
-          <button id="editorPlay" class="live-tool live-play" type="button" aria-label="Play or pause">▶</button>
-          <span class="live-selection" id="liveSelection">SELECT A NOTE</span>
-          <select id="editorPitch" class="live-field" disabled aria-label="Note pitch"></select>
-          <label class="live-number" title="Start time"><span>AT</span><input id="editorStart" type="number" min="0" step="0.01" disabled /></label>
-          <label class="live-number" title="Note length"><span>LEN</span><input id="editorLength" type="number" min="0.08" step="0.01" disabled /></label>
-          <button id="editorCopy" class="live-tool" disabled type="button" title="Copy selected note (Ctrl/Cmd+C)">COPY</button>
-          <button id="editorPaste" class="live-tool" disabled type="button" title="Paste note (Ctrl/Cmd+V)">PASTE</button>
-          <button id="editorDelete" class="live-tool live-delete" disabled type="button" title="Delete note" aria-label="Delete selected note">×</button>
-          <label class="backing-upload live-tool" title="Upload an audio or video file; only its audio will be used">
-            <input id="backingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden />
-            + BACKING
-          </label>
-          <span id="backingName" class="backing-name">NO BACKING</span>
-          <label class="live-number backing-offset" title="Backing track start on the note timeline"><span>OFFSET</span><input id="backingOffset" type="number" step="0.05" value="0" aria-label="Backing track offset in seconds" /></label>
-          <button id="backingRemove" class="live-tool backing-remove" disabled type="button" title="Remove backing track">REMOVE</button>
-          <span class="live-spacer"></span>
-          <button id="editorCancel" class="live-tool" type="button" title="Cancel edits">CANCEL</button>
-          <button id="editorSave" class="live-tool live-save" type="button" title="Save edits">DONE</button>
+        <div class="live-editor" id="liveEditor" hidden role="dialog" aria-modal="true" aria-labelledby="arrangementTitle">
+          <div class="arrangement-window">
+            <header class="arrangement-header">
+              <div><small>EDIT MODE</small><strong id="arrangementTitle">Align music &amp; notes</strong></div>
+              <div class="arrangement-header-actions"><button id="editorCancel" class="live-tool" type="button">CANCEL</button><button id="editorSave" class="live-tool live-save" type="button">DONE</button></div>
+            </header>
+            <div class="arrangement-controls">
+              <button id="editorPlay" class="live-tool live-play" type="button" aria-label="Play or pause">▶</button>
+              <span class="live-selection" id="liveSelection">SELECT A NOTE</span>
+              <select id="editorPitch" class="live-field" disabled aria-label="Note pitch"></select>
+              <label class="live-number" title="Start time"><span>AT</span><input id="editorStart" type="number" min="0" step="0.01" disabled /></label>
+              <label class="live-number" title="Note length"><span>LEN</span><input id="editorLength" type="number" min="0.08" step="0.01" disabled /></label>
+              <button id="editorCopy" class="live-tool" disabled type="button" title="Copy selected note (Ctrl/Cmd+C)">COPY</button>
+              <button id="editorPaste" class="live-tool" disabled type="button" title="Paste note (Ctrl/Cmd+V)">PASTE</button>
+              <button id="editorDelete" class="live-tool live-delete" disabled type="button" title="Delete note" aria-label="Delete selected note">×</button>
+            </div>
+            <div class="arrangement-music">
+              <label class="backing-upload live-tool" title="Upload an audio or video file; only its audio will be used">
+                <input id="backingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden />
+                + UPLOAD BACKSOUND
+              </label>
+              <span id="backingName" class="backing-name">NO BACKSOUND</span>
+              <button id="backingNudgeBack" class="live-tool backing-nudge" type="button" title="Move backsound 0.10 seconds earlier">−0.10</button>
+              <label class="live-number backing-offset" title="Backsound start on the note timeline"><span>START</span><input id="backingOffset" type="number" step="0.05" value="0" aria-label="Backsound start time in seconds" /></label>
+              <button id="backingNudgeForward" class="live-tool backing-nudge" type="button" title="Move backsound 0.10 seconds later">+0.10</button>
+              <button id="backingRemove" class="live-tool backing-remove" disabled type="button" title="Remove backsound">REMOVE</button>
+              <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Turn uploaded music on or off"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Music on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
+            </div>
+            <div class="arrangement-timeline-wrap">
+              <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
+            </div>
+            <footer class="arrangement-footer"><span>Drag the backsound bar to align its start. Drag a note to change its pitch and timing.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+          </div>
         </div>
       </div>
       <div class="keys" id="piano" aria-label="Chromatic piano keyboard C1 through B1"></div>
@@ -73,12 +87,12 @@
     <aside class="control-panel">
       <div class="panel-heading"><h2>Controls</h2></div>
       <div class="panel-body">
-        <div class="section-heading"><strong>SONG</strong></div>
+        <div class="section-heading song-heading"><strong>SONG</strong><label class="load-project"><input id="projectFile" type="file" accept="application/json,.json,.klung" hidden /><span>↥</span> LOAD PROJECT</label></div>
         <label class="upload" id="dropZone">
-          <input id="file" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.mid,.midi,.json,.klung" hidden />
+          <input id="file" type="file" accept="audio/*,audio/mp4,audio/x-m4a,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.mid,.midi" hidden />
           <span class="upload-symbol" aria-hidden="true">↑</span>
           <strong>Choose a song</strong>
-          <span class="upload-types">M4A · MP3 · WAV · MIDI · KLUNG</span>
+          <span class="upload-types">M4A · MP3 · WAV · MIDI</span>
         </label>
         <button class="demo-btn" id="demo" type="button"><span class="sample-icon">♫</span><span>Demo</span><span class="button-arrow">↗</span></button>
         <button class="record-btn" id="record" type="button" aria-pressed="false"><span class="record-button-dot" aria-hidden="true"></span><span id="recordLabel">Record</span><span class="record-key-hint">KEYS</span></button>
@@ -86,7 +100,6 @@
         <div class="section-heading"><strong>PLAY</strong></div>
         <div class="transport"><button id="play" class="play" disabled type="button" aria-label="Play or pause">▶</button><button id="restart" class="icon-btn" disabled title="Restart" aria-label="Restart" type="button">↺</button><div class="clock"><strong id="clock">00:00</strong><span id="duration">/ 00:00</span></div></div>
         <input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="Playback position" />
-        <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Mute the original song and hear notes only"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Song on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
         <div class="setting"><div><strong>Speed</strong></div><b id="leadText">3.0s</b></div>
         <input id="lead" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="Note travel time" />
         <div class="setting"><div><strong>Volume</strong></div><b id="volText">70%</b></div>
@@ -99,8 +112,7 @@
         <div class="section-heading editor-section-heading"><strong>EDIT</strong></div>
         <div class="project-actions">
           <button class="edit-notes" id="editNotes" disabled type="button"><span>✦</span> EDIT</button>
-          <button class="export" id="export" disabled type="button"><span>↓</span> PROJECT</button>
-          <button class="export session-export" id="saveSession" disabled type="button"><span>⬡</span> SESSION</button>
+          <button class="export session-export" id="saveProject" disabled type="button"><span>↓</span> SAVE PROJECT</button>
           <button class="export video-export" id="exportVideo" disabled type="button"><span>▶</span> VIDEO</button>
           <button class="export live-session-button" id="hostSession" disabled type="button"><span>⌁</span> MOBILE</button>
         </div>
@@ -136,7 +148,9 @@
       <button id="mobileReady" type="button" disabled>READY</button>
     </div>
     <div class="mobile-cue" id="mobileCue" hidden>
+      <canvas id="mobileTimeline" class="mobile-cue-timeline" aria-label="All notes in the performance"></canvas>
       <div class="mobile-cue-status"><span id="mobileCueDot"></span><strong id="mobileCueStatus">WAITING FOR MASTER</strong></div>
+      <div class="mobile-cue-klung" id="mobileCueKlung"><strong>Klung!</strong><span id="mobileCueKlungNotes"></span></div>
     </div>
   </section>
   <audio id="audio" preload="metadata"></audio>

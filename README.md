@@ -4,17 +4,16 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 
 ## Features
 
-- Import M4A, MP3, WAV, MIDI, and saved Klung projects.
+- Import M4A, MP3, WAV, and MIDI songs, or use the separate **Load Project** control to reopen a saved Klung project.
 - Transcribe audio locally with Spotify Basic Pitch, then fold every octave into one chromatic C1–B1 layout.
 - Record a melody from the computer keyboard. Use `A S D F G H J` for white notes and `W E T Y U` for black notes; holding a key creates one longer note.
-- Play and edit on the same falling-note stage. Select, move, resize, copy, paste, or delete notes while playback remains available.
-- Scroll up/down on the stage while editing to scrub forward/backward.
-- Add an audio or video backing track in Edit mode. Klung uses its audio only, and the timeline offset can be adjusted by hand.
+- Open the arrangement popup to play, select, move, copy, paste, or delete notes while comparing them with a separate backsound track.
+- Scroll up/down in the arrangement timeline to scrub backward/forward.
+- Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track or use the start/nudge controls to align it with the notes.
 - Export a 720p performance video with the notes, keyboard, source/backing audio, and synthesized note cues. The recording starts as the first falling note enters the stage.
-- Save a portable `.klung-session.json` containing notes, source audio/video, backing audio/video, offsets, mute state, speed, and volume.
-- Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, and see a full-screen color cue only when their angklung should be played.
-- Switch an imported audio track to **Notes only** so the original recording is muted while synthesized note cues remain audible.
-- Save edits as a `.klung.json` project and load them again later.
+- Save one portable `.klung-project.json` containing notes, source audio/video, backsound audio/video, offsets, mute state, speed, and volume.
+- Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, see the shared falling-note timeline, then get a full-screen color and **Klung!** cue on their turn.
+- Switch uploaded music on or off from beside the backsound upload controls.
 - Use the fullscreen performance view for projection.
 
 ## Run locally
