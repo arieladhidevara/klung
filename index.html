@@ -39,6 +39,8 @@
         <div class="record-hud" id="recordHud" hidden>
           <span class="record-pulse" aria-hidden="true"></span>
           <strong id="recordTime">00:00</strong>
+          <button id="recordPlay" class="record-transport record-play" type="button" aria-label="Play recording timeline">▶</button>
+          <button id="recordRestart" class="record-transport" type="button" aria-label="Rewind recording timeline">↺</button>
           <div class="record-map" aria-label="Computer keyboard note map">
             <span><b>WHITE</b><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd></span>
             <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
@@ -80,8 +82,12 @@
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Select notes, then drag any selected note to move them together. Scroll up to move forward; scroll down to rewind. Ctrl/Cmd+Z undoes.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+            <footer class="arrangement-footer"><span>Select notes, right-click for Group/Ungroup, then drag one to move the group. Scroll up moves forward; scroll down rewinds.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
           </div>
+        </div>
+        <div class="note-context-menu" id="noteContextMenu" hidden role="menu" aria-label="Selected note actions">
+          <button id="groupNotes" type="button" role="menuitem">GROUP</button>
+          <button id="ungroupNotes" type="button" role="menuitem">UNGROUP</button>
         </div>
       </div>
       <div class="keys" id="piano" aria-label="Chromatic piano keyboard from Do through Si"></div>
@@ -105,8 +111,8 @@
         <div class="section-heading"><strong>PLAY</strong></div>
         <div class="transport"><button id="play" class="play" disabled type="button" aria-label="Play or pause">▶</button><button id="restart" class="icon-btn" disabled title="Restart" aria-label="Restart" type="button">↺</button><div class="clock"><strong id="clock">00:00</strong><span id="duration">/ 00:00</span></div></div>
         <input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="Playback position" />
-        <div class="setting"><div><strong>Speed</strong></div><b id="leadText">3.0s</b></div>
-        <input id="lead" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="Note travel time" />
+        <div class="setting"><div><strong>Speed</strong></div><b id="leadText">1.00×</b></div>
+        <input id="lead" type="range" min="0.5" max="2" step="0.05" value="1" aria-label="Playback speed" />
         <div class="setting"><div><strong>Volume</strong></div><b id="volText">70%</b></div>
         <input id="volume" type="range" min="0" max="1" step="0.05" value="0.7" aria-label="Volume" />
         <div class="control-rule"></div>

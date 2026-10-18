@@ -11,10 +11,10 @@ function randomCode(){
   return [...bytes].map(value=>alphabet[value%alphabet.length]).join('');
 }
 
-export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPlay,noteNames,noteColors,noteInk}){
+export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPlaying,onMasterPlay,noteNames,noteColors,noteInk}){
   const params=new URLSearchParams(location.search),joinCode=(params.get('session')||'').trim().toUpperCase();
   const isMobile=Boolean(joinCode)&&(location.pathname.replace(/\/+$/,'')==='/join'||params.has('mobile'));
-  let role=isMobile?'mobile':null,room=null,code='',masterPeerId=null,snapshot=null,clockOffset=0,clockSamples=[],mobileSelection=new Set(),mobileTransport={playing:false,position:0,executeAt:0,status:'Waiting for master'};
+  let role=isMobile?'mobile':null,room=null,code='',masterPeerId=null,snapshot=null,clockOffset=0,clockSamples=[],mobileSelection=new Set(),mobileTransport={playing:false,position:0,executeAt:0,playbackRate:1,status:'Waiting for master'};
   let stateAction,selectionAction,transportAction,clockAction,helloAction,mobileFrame=0,wakeLock=null;
   const peers=new Map(),pendingPings=new Map();
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
@@ -69,10 +69,10 @@ export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPla
 
   function preparePlay(position){
     if(!room||role!=='master'||!peers.size)return null;
-    const executeAt=Date.now()+1800,payload={command:'play',position,executeAt,sequence:crypto.randomUUID?.()||String(executeAt)};safeSend(transportAction,payload);return {blocked:false,executeAt};
+    const executeAt=Date.now()+1800,payload={command:'play',position,playbackRate:Number(getPlaybackRate?.())||1,executeAt,sequence:crypto.randomUUID?.()||String(executeAt)};safeSend(transportAction,payload);return {blocked:false,executeAt};
   }
-  function broadcastPause(position){if(room&&role==='master')safeSend(transportAction,{command:'pause',position,masterNow:Date.now()})}
-  function broadcastSeek(position,playing){if(room&&role==='master')safeSend(transportAction,{command:'sync',position,playing:Boolean(playing),masterNow:Date.now()})}
+  function broadcastPause(position){if(room&&role==='master')safeSend(transportAction,{command:'pause',position,playbackRate:Number(getPlaybackRate?.())||1,masterNow:Date.now()})}
+  function broadcastSeek(position,playing){if(room&&role==='master')safeSend(transportAction,{command:'sync',position,playing:Boolean(playing),playbackRate:Number(getPlaybackRate?.())||1,masterNow:Date.now()})}
   function broadcastSync(position){broadcastSeek(position,true)}
   function refresh(){if(room&&role==='master'){sendState();renderMasterPlayers()}}
 
@@ -94,10 +94,11 @@ export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPla
 
   function setMobileStatus(label,disconnected=false){const cue=$('#mobileCue');$('#mobileCueStatus').textContent=label;cue.classList.toggle('disconnected',disconnected);cue.classList.remove('playing');cue.style.background='#0d1715'}
   function applyMobileTransport(data){
-    if(data.command==='play'){mobileTransport={playing:true,position:Number(data.position)||0,executeAt:Number(data.executeAt)||Date.now()+clockOffset,status:'Get ready'};$('#mobileCue').classList.add('playing');return}
-    if(data.command==='pause'){mobileTransport={playing:false,position:Number(data.position)||0,executeAt:0,status:'PAUSED BY MASTER'};setMobileStatus('PAUSED BY MASTER');return}
+    const playbackRate=Math.max(.1,Number(data.playbackRate)||Number(snapshot?.playbackSpeed)||1);
+    if(data.command==='play'){mobileTransport={playing:true,position:Number(data.position)||0,executeAt:Number(data.executeAt)||Date.now()+clockOffset,playbackRate,status:'Get ready'};$('#mobileCue').classList.add('playing');return}
+    if(data.command==='pause'){mobileTransport={playing:false,position:Number(data.position)||0,executeAt:0,playbackRate,status:'PAUSED BY MASTER'};setMobileStatus('PAUSED BY MASTER');return}
     if(data.command==='sync'){
-      const corrected=(Number(data.position)||0)+(data.playing?Math.max(0,(Date.now()+clockOffset-(Number(data.masterNow)||Date.now()+clockOffset))/1000):0);mobileTransport={playing:Boolean(data.playing),position:corrected,executeAt:Date.now()+clockOffset,status:data.playing?'Playing':'Waiting for master'};
+      const corrected=(Number(data.position)||0)+(data.playing?Math.max(0,(Date.now()+clockOffset-(Number(data.masterNow)||Date.now()+clockOffset))/1000)*playbackRate:0);mobileTransport={playing:Boolean(data.playing),position:corrected,executeAt:Date.now()+clockOffset,playbackRate,status:data.playing?'Playing':'Waiting for master'};
     }
   }
 
@@ -116,7 +117,7 @@ export function createLiveSession({getSnapshot,getPosition,isPlaying,onMasterPla
     mobileFrame=requestAnimationFrame(renderMobileCue);if(!snapshot||$('#mobileCue').hidden)return;const cue=$('#mobileCue');
     if(!mobileTransport.playing){renderMobileTimeline(mobileTransport.position);cue.classList.remove('playing');cue.style.background='#0d1715';$('#mobileCueStatus').textContent=mobileTransport.status.toUpperCase();return}
     const masterNow=Date.now()+clockOffset;if(masterNow<mobileTransport.executeAt){renderMobileTimeline(mobileTransport.position);cue.style.background='#0d1715';$('#mobileCueStatus').textContent='GET READY';return}
-    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000;renderMobileTimeline(timeline);cue.classList.add('playing');cue.style.background='#0d1715';$('#mobileCueStatus').textContent='PLAYING';
+    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000*mobileTransport.playbackRate;renderMobileTimeline(timeline);cue.classList.add('playing');cue.style.background='#0d1715';$('#mobileCueStatus').textContent='PLAYING';
     if(timeline>(snapshot.duration||0)+.5){mobileTransport.playing=false;mobileTransport.status='Finished';setMobileStatus('FINISHED')}
   }
 
