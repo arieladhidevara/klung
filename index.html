@@ -53,6 +53,8 @@
             </header>
             <div class="arrangement-controls">
               <button id="editorPlay" class="live-tool live-play" type="button" aria-label="Play or pause">▶</button>
+              <button id="editorUndo" class="live-tool" disabled type="button" title="Undo note edit (Ctrl/Cmd+Z)" aria-label="Undo note edit">UNDO</button>
+              <button id="editorRedo" class="live-tool" disabled type="button" title="Redo note edit (Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y)" aria-label="Redo note edit">REDO</button>
               <span class="live-selection" id="liveSelection">SELECT NOTES</span>
               <select id="editorPitch" class="live-field" disabled aria-label="Note pitch"></select>
               <label class="live-number" title="Start time"><span>AT</span><input id="editorStart" type="number" min="0" step="0.01" disabled /></label>
@@ -78,7 +80,7 @@
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Drag across empty space to select notes. Ctrl/Cmd/Shift-click adds notes. Copy and paste keeps their timing.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+            <footer class="arrangement-footer"><span>Select notes, then drag any selected note to move them together. Scroll up to move forward; scroll down to rewind. Ctrl/Cmd+Z undoes.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
           </div>
         </div>
       </div>
@@ -98,6 +100,7 @@
         </label>
         <button class="demo-btn" id="demo" type="button"><span class="sample-icon">♫</span><span>Demo</span><span class="button-arrow">↗</span></button>
         <button class="record-btn" id="record" type="button" aria-pressed="false"><span class="record-button-dot" aria-hidden="true"></span><span id="recordLabel">Record</span><span class="record-key-hint">KEYS</span></button>
+        <label class="record-btn record-backing" id="recordBacking"><input id="recordBackingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden /><span class="record-button-dot" aria-hidden="true"></span><span id="recordBackingLabel">Upload backsound</span><span class="record-key-hint">AUDIO</span></label>
         <div class="control-rule"></div>
         <div class="section-heading"><strong>PLAY</strong></div>
         <div class="transport"><button id="play" class="play" disabled type="button" aria-label="Play or pause">▶</button><button id="restart" class="icon-btn" disabled title="Restart" aria-label="Restart" type="button">↺</button><div class="clock"><strong id="clock">00:00</strong><span id="duration">/ 00:00</span></div></div>
