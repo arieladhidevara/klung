@@ -6,7 +6,8 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 
 - Import M4A, MP3, WAV, and MIDI songs, or use the separate **Load Project** control to reopen a saved Klung project.
 - Transcribe audio locally with Spotify Basic Pitch, then fold every octave into one chromatic C1–B1 layout.
-- Record a melody from the computer keyboard against an optional backsound. Record mode opens paused: use Space or its transport buttons to play/pause or rewind, scroll to scrub notes and backsound together, and upload or replace the backsound without leaving Record mode. Stopping a recording opens quick edit on the performance stage, where notes can be selected, copied, pasted, deleted, moved, or resized.
+- Record a melody from the computer keyboard against an optional backsound. Record mode opens paused: use Space or its transport buttons to play/pause or rewind, scroll to scrub notes and backsound together, and upload or replace the backsound without leaving Record mode. Recorded notes can be selected, copied, pasted, deleted, moved, or resized while recording is still open.
+- Notes remain directly editable on the performance stage after recording, importing, or leaving the full timeline editor.
 - Open the arrangement popup to play, move, resize, multi-select, copy, paste, delete, undo, or redo notes. Right-click a multi-selection for Group/Ungroup; clicking or dragging one grouped note selects and moves the entire group.
 - Scroll up/down in the arrangement timeline to zoom; zoomed timelines use horizontal overflow for left/right navigation.
 - Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track to align it, resize its right edge to time-stretch it, or use the precise start/length controls.
@@ -41,7 +42,7 @@ npm run build
 ## Controls
 
 - `Space`: play or pause.
-- Mouse wheel on the stage while quick-editing: scrub backward or forward to find notes.
+- Mouse wheel on the stage: scrub backward or forward to find and edit notes, including during recording.
 - Mouse wheel in the arrangement timeline: zoom in or out around the pointer; use horizontal overflow or Shift+wheel to move left/right.
 - Mouse wheel in Record mode: scrub the recorded notes and backsound together (up moves forward, down rewinds).
 - `Space` in Record mode: play or pause the recording timeline.
