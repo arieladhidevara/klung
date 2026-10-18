@@ -25,10 +25,10 @@
       <div class="stage-top">
         <div class="stage-section"><span class="live-dot" aria-hidden="true"></span> LIVE</div>
         <div class="song"><div id="songTitle">Klung!</div><span id="songSubtitle"></span></div>
-        <div class="pitch-range"><b id="pitchRangeLabel">C1 <i>—</i> B1</b></div>
+        <div class="pitch-range"><b id="pitchRangeLabel">Do <i>—</i> Si</b></div>
       </div>
       <div class="canvas-wrap">
-        <canvas id="stageCanvas" aria-label="Seven white-note lanes from C through B with chromatic black notes"></canvas>
+        <canvas id="stageCanvas" aria-label="Falling-note performance with solfège labels"></canvas>
         <div class="stage-watermark" aria-hidden="true">KLUNG!</div>
         <div class="empty" id="empty">
           <div class="empty-motif" aria-hidden="true"><div class="petal p1"></div><div class="petal p2"></div><div class="petal p3"></div><div class="petal p4"></div><div class="motif-core"></div></div>
@@ -73,16 +73,16 @@
               <label class="live-number backing-length" title="Backsound length on the timeline"><span>LEN</span><input id="backingLength" type="number" min="0.25" step="0.05" value="0" aria-label="Backsound timeline length in seconds" /></label>
               <button id="backingResetSize" class="live-tool backing-nudge" type="button" title="Restore the backsound's original length">1:1</button>
               <button id="backingRemove" class="live-tool backing-remove" disabled type="button" title="Remove backsound">REMOVE</button>
-              <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Turn the editor backsound on or off"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Backsound on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
+              <button id="muteSong" class="mute-song" type="button" disabled aria-pressed="false" title="Turn the source piano or melody on or off without muting the backsound"><span class="mute-song-icon" aria-hidden="true">♪</span><span id="muteSongLabel">Piano on</span><span class="mute-song-switch" aria-hidden="true"><i></i></span></button>
             </div>
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Ctrl/Cmd/Shift-click to select multiple notes. Ctrl/Cmd+A selects all. Copy and paste keeps their timing.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+            <footer class="arrangement-footer"><span>Drag across empty space to select notes. Ctrl/Cmd/Shift-click adds notes. Copy and paste keeps their timing.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
           </div>
         </div>
       </div>
-      <div class="keys" id="piano" aria-label="Chromatic piano keyboard C1 through B1"></div>
+      <div class="keys" id="piano" aria-label="Chromatic piano keyboard from Do through Si"></div>
       <div class="stage-bottom"><div class="key-guide"><span class="rainbow-swatch"></span></div><div class="stage-credit">KLUNG!</div></div>
     </section>
 
@@ -104,7 +104,6 @@
         <input id="seek" type="range" min="0" max="1000" value="0" disabled aria-label="Playback position" />
         <div class="setting"><div><strong>Speed</strong></div><b id="leadText">3.0s</b></div>
         <input id="lead" type="range" min="1.5" max="7" step="0.5" value="3" aria-label="Note travel time" />
-        <div class="setting notation-setting"><div><strong>Note labels</strong></div><select id="notationTonic" aria-label="Choose the note represented by Do"><option value="0">Do = C</option><option value="7">Do = G</option></select></div>
         <div class="setting"><div><strong>Volume</strong></div><b id="volText">70%</b></div>
         <input id="volume" type="range" min="0" max="1" step="0.05" value="0.7" aria-label="Volume" />
         <div class="control-rule"></div>

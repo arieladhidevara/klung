@@ -12,10 +12,10 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 - Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track to align it, resize its right edge to time-stretch it, or use the precise start/length controls.
 - Resize a selected note from either edge in the arrangement timeline, or enter its exact start and length values.
 - Export a 720p performance video with the notes, keyboard, source/backing audio, and synthesized note cues. The recording starts as the first falling note enters the stage.
-- Save one portable `.klung-project.json` containing notes, source audio/video, backsound audio/video, offsets, backsound mute state, label key, speed, and volume.
-- Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, then see only their selected falling-note lanes, sized to fill the phone screen.
-- Switch the editor backsound on or off from beside its upload controls.
-- Change note labels between **Do = C** and **Do = G**; the stage, editor, exports, and connected phones update together.
+- Save one portable `.klung-project.json` containing notes, source audio/video, backsound audio/video, offsets, piano mute state, speed, and volume.
+- Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, then see only their selected falling-note lanes, sized to fill the phone screen. Upcoming notes are dimmed; notes glow and read **Klung!** when they reach the hit line.
+- Switch the source piano/melody sound on or off in Edit mode without muting the backsound.
+- Use fixed solfège labels (Do, Re, Mi, Fa, Sol, and chromatic variants) across the stage, editor, exports, and connected phones.
 - Use the fullscreen performance view for projection.
 
 ## Run locally
@@ -41,6 +41,7 @@ npm run build
 
 - `Space`: play or pause.
 - Mouse wheel on the stage while editing: scrub backward or forward.
+- Drag across empty space in the arrangement timeline to select every intersecting note.
 - `Ctrl/Cmd/Shift` + click: add or remove notes from the editor selection.
 - `Ctrl/Cmd+A`: select every note in the editor.
 - `Ctrl/Cmd+C` / `Ctrl/Cmd+V`: copy and paste all selected notes while preserving their relative timing.
