@@ -47,6 +47,15 @@
           </div>
           <button id="stopRecord" class="record-stop" type="button">STOP</button>
         </div>
+        <div class="stage-edit-hud" id="stageEditHud" hidden>
+          <strong id="stageEditSelection">SELECT A NOTE</strong>
+          <span>SCROLL TO FIND NOTES</span>
+          <button id="stageEditCopy" class="live-tool" disabled type="button">COPY</button>
+          <button id="stageEditPaste" class="live-tool" disabled type="button">PASTE</button>
+          <button id="stageEditDelete" class="live-tool live-delete" disabled type="button" aria-label="Delete selected notes">×</button>
+          <button id="stageEditTimeline" class="live-tool" type="button">TIMELINE</button>
+          <button id="stageEditDone" class="live-tool live-save" type="button">DONE</button>
+        </div>
         <div class="live-editor" id="liveEditor" hidden role="dialog" aria-modal="true" aria-labelledby="arrangementTitle">
           <div class="arrangement-window">
             <header class="arrangement-header">
@@ -82,7 +91,7 @@
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Select notes, right-click for Group/Ungroup, then drag one to move the group. Scroll up moves forward; scroll down rewinds.</span><b id="arrangementClock">00:00 / 00:00</b></footer>
+            <footer class="arrangement-footer"><span>Scroll up/down to zoom. Use the horizontal overflow to move left/right.</span><div><b id="arrangementZoomLabel">100%</b><b id="arrangementClock">00:00 / 00:00</b></div></footer>
           </div>
         </div>
         <div class="note-context-menu" id="noteContextMenu" hidden role="menu" aria-label="Selected note actions">
