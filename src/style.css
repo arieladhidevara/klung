@@ -107,7 +107,7 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
   body.mobile-record-mode .hit-label,
   body.mobile-record-mode .stage-edit-hud,
   body.mobile-record-mode .record-map,
-  body.mobile-record-mode #stageCanvas{display:none!important}
+  body.mobile-record-mode #stageCanvas{visibility:hidden!important;pointer-events:none!important}
   body.mobile-record-mode .canvas-wrap{
     flex:0 0 86px!important;height:86px!important;min-height:0!important;
     background:#101c19;overflow:visible
