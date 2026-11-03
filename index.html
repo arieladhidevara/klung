@@ -37,23 +37,26 @@
         </div>
         <div class="hit-label"><span class="hit-line-sample"></span> HIT</div>
         <div class="record-hud" id="recordHud" hidden>
+          <button id="mobileRecordMenuToggle" class="mobile-record-menu-toggle" type="button" aria-expanded="false" aria-controls="mobileRecordOptions" aria-label="Open recording controls">☰ MENU</button>
           <span class="record-pulse" aria-hidden="true"></span>
           <strong id="recordTime">00:00</strong>
-          <button id="recordPlay" class="record-transport record-play" type="button" aria-label="Play recording timeline">▶</button>
-          <button id="recordRestart" class="record-transport" type="button" aria-label="Rewind recording timeline">↺</button>
-          <div class="mobile-record-tools" aria-label="Mobile recording options">
+          <button id="mobileRecordExit" class="mobile-record-exit" type="button" aria-label="Finish recording and return to normal view">EXIT ↗</button>
+          <div class="mobile-record-options" id="mobileRecordOptions">
+            <button id="recordPlay" class="record-transport record-play" type="button" aria-label="Play recording timeline">▶</button>
+            <button id="recordRestart" class="record-transport" type="button" aria-label="Rewind recording timeline">↺</button>
+            <div class="mobile-record-tools" aria-label="Mobile recording options">
               <label class="mobile-record-upload" title="Choose audio or video backing music">
                 <input id="mobileRecordBackingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden />
                 ♫ BACKSOUND
               </label>
               <span id="mobileRecordBackingName" class="mobile-record-backing-name">NO BACKSOUND</span>
-              <span class="mobile-record-tip">TAP KEYS TO RECORD</span>
             </div>
             <div class="record-map" aria-label="Computer keyboard note map">
-            <span><b>WHITE</b><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd></span>
-            <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
+              <span><b>WHITE</b><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd></span>
+              <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
+            </div>
+            <button id="stopRecord" class="record-stop" type="button">STOP</button>
           </div>
-          <button id="stopRecord" class="record-stop" type="button">STOP</button>
         </div>
         <div class="stage-edit-hud" id="stageEditHud" hidden>
           <strong id="stageEditSelection">SELECT A NOTE</strong>

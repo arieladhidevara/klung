@@ -757,6 +757,7 @@ $('#piano').addEventListener('pointerdown',event=>{
   const key=event.target.closest('.key');if(!key||!$('#piano').contains(key))return;
   const pitch=Number(key.dataset.pitch);if(!Number.isInteger(pitch))return;
   event.preventDefault();
+  setMobileRecordMenuOpen(false);
   if(!recordingPlaying){
     // The first piano touch can start the timeline; users needn't reach Play first.
     void context().resume().catch(()=>{});
@@ -773,6 +774,15 @@ function finishTouchPianoPointer(event){
   touchPianoPointers.delete(event.pointerId);finishKeyboardNote(code);
 }
 for(const name of ['pointerup','pointercancel','lostpointercapture'])$('#piano').addEventListener(name,finishTouchPianoPointer);
+function setMobileRecordMenuOpen(open){
+  const hud=$('#recordHud'),button=$('#mobileRecordMenuToggle');
+  const expanded=Boolean(open&&mobileRecordingMode&&recording);
+  hud.classList.toggle('mobile-menu-open',expanded);
+  button.setAttribute('aria-expanded',String(expanded));
+  button.setAttribute('aria-label',expanded?'Close recording controls':'Open recording controls');
+}
+$('#mobileRecordMenuToggle').onclick=()=>setMobileRecordMenuOpen(!$('#recordHud').classList.contains('mobile-menu-open'));
+$('#mobileRecordExit').onclick=()=>{if(recording)stopRecording()};
 function isPhoneRecordingViewport(){
   return window.matchMedia('(pointer:coarse)').matches&&Math.min(window.innerWidth,window.innerHeight)<=900;
 }
@@ -781,6 +791,7 @@ function enterMobileRecordMode(){
   if(!mobileRecordingMode)return;
   document.body.classList.add('mobile-record-mode');
   document.body.classList.remove('performance-mode');
+  setMobileRecordMenuOpen(false);
   // Request while the Record tap still has user activation; Safari may reject it.
   try{
     if(!document.fullscreenElement&&document.documentElement.requestFullscreen){
@@ -798,6 +809,7 @@ function enterMobileRecordMode(){
 function leaveMobileRecordMode(){
   if(!mobileRecordingMode)return;
   mobileRecordingMode=false;document.body.classList.remove('mobile-record-mode');
+  setMobileRecordMenuOpen(false);
   touchPianoPointers.clear();
   try{screen.orientation?.unlock?.()}catch{}
   if(mobileRecordOwnsFullscreen&&document.fullscreenElement)void document.exitFullscreen?.().catch(()=>{});
@@ -864,7 +876,7 @@ document.addEventListener('keydown',e=>{
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='v'&&!typing){e.preventDefault();pasteEditorNote();return}
     if((e.key==='Delete'||e.key==='Backspace')&&!typing){e.preventDefault();deleteSelectedEditorNote();return}
   }
-  if(recording){if(e.code==='Escape'){e.preventDefault();stopRecording()}else if(e.code==='Space'&&!e.repeat){e.preventDefault();toggleRecordingPlayback()}else startRecordedNote(e);return}
+  if(recording){if(e.code==='Escape'){e.preventDefault();if(mobileRecordingMode&&$('#recordHud').classList.contains('mobile-menu-open'))setMobileRecordMenuOpen(false);else stopRecording()}else if(e.code==='Space'&&!e.repeat){e.preventDefault();toggleRecordingPlayback()}else startRecordedNote(e);return}
   if(noteEditingActive()&&e.key==='Escape'){if(!noteContextMenu.hidden)hideNoteContextMenu();else if(!editorRoot.hidden)closeEditorToStage();else selectEditorNote(null);return}
   if(e.code==='Space'&&e.target?.tagName!=='INPUT'&&e.target?.tagName!=='BUTTON'){e.preventDefault();play()}
 });
@@ -883,6 +895,19 @@ function rebuildStageBackground(w,h,dpr){
 function render(ms){
  requestAnimationFrame(render);
  if(ms-lastFrame<1000/70)return;lastFrame=ms;
+ // Canvas is intentionally hidden in mobile piano mode: still update recording.
+ if(recording&&mobileRecordingMode){
+   time=recordElapsed();
+   if(recordingPlaying)syncRecordingBacking(time,true,false);
+   for(const key of keyEls.values())key.classList.remove('active');
+   for(const {note} of pressedKeyboard.values()){
+     note.duration=Math.max(.08,time-note.start);
+     keyEls.get(note.pitch)?.classList.add('active');
+   }
+   $('#recordTime').textContent=format(time);
+   $('#clock').textContent=format(time);
+   return;
+ }
  const rect=canvas.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);
  if(canvas.width!==Math.round(rect.width*dpr)||canvas.height!==Math.round(rect.height*dpr)||stageBackground.width!==Math.round(rect.width*dpr)||stageBackground.height!==Math.round(rect.height*dpr)){
    canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);rebuildStageBackground(rect.width,rect.height,dpr);
