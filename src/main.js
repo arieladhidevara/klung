@@ -41,6 +41,7 @@ let pianoMuted=false;
 let backingUrl=null,backingName='',backingDuration=0,backingOffset=0,backingPlaybackRate=1,exporting=false,exportAudioDestination=null;
 let sourceMediaAsset=null,backingMediaAsset=null,liveSession=null,pendingPlayTimer=null,pendingPlayPosition=0,lastLiveSyncAt=0;
 let recording=false,recordingPlaying=false,recordPosition=0,recordStartedAt=0,recordedNotes=[],recordingSnapshot=null;
+let recordingBackingPlayPending=false,recordingBackingPlayToken=0;
 const pressedKeyboard=new Map();
 const touchPianoPointers=new Map();
 let mobileRecordingMode=false,mobileRecordOwnsFullscreen=false;
@@ -232,8 +233,33 @@ function maintainTimelineMedia(timeline,now){
   lastMediaMaintenanceAt=now;syncTimelineMedia(timeline,true,false);
 }
 function syncRecordingBacking(timeline,shouldPlay,forcePosition=true){
-  const media=$('#backingAudio'),ready=Boolean(backingUrl)&&setMediaPosition(media,timeline,backingOffset,backingPlaybackRate,forcePosition);
-  if(shouldPlay&&ready&&media.paused)media.play().catch(error=>console.warn('Could not play recording backsound',error));else if((!shouldPlay||!ready)&&!media.paused)media.pause();
+  const media=$('#backingAudio');
+  if(!shouldPlay){
+    const pending=recordingBackingPlayPending;
+    recordingBackingPlayPending=false;
+    recordingBackingPlayToken++;
+    if(pending||!media.paused)media.pause();
+    return;
+  }
+  // play() can take several frames to resolve on iOS. Repeated currentTime seeks
+  // during that startup skip the beginning of the track and desync captured notes.
+  if(recordingBackingPlayPending&&!forcePosition)return;
+  if(recordingBackingPlayPending&&forcePosition){
+    recordingBackingPlayToken++;
+    media.pause();recordingBackingPlayPending=false;
+  }
+  const ready=Boolean(backingUrl)&&setMediaPosition(media,timeline,backingOffset,backingPlaybackRate,forcePosition);
+  if(ready&&media.paused){
+    const token=++recordingBackingPlayToken;
+    recordingBackingPlayPending=true;
+    Promise.resolve(media.play()).then(()=>{
+      if(token===recordingBackingPlayToken)recordingBackingPlayPending=false;
+    },error=>{
+      if(token!==recordingBackingPlayToken)return;
+      recordingBackingPlayPending=false;
+      console.warn('Could not play recording backsound',error);
+    });
+  }else if(!ready&&!media.paused)media.pause();
 }
 async function attachBackingAsset(asset){
   const media=$('#backingAudio'),nextUrl=URL.createObjectURL(new Blob([asset.bytes],{type:asset.type})),previous={url:backingUrl,name:backingName,duration:backingDuration,playbackRate:backingPlaybackRate,asset:backingMediaAsset};media.pause();
@@ -737,7 +763,21 @@ function setRecordingControls(active){
   $('#stageEditTimeline').disabled=active;
   $('#record').classList.toggle('active',active);$('#record').setAttribute('aria-pressed',String(active));$('#record').setAttribute('aria-label',active?'Stop recording':'Record with computer keyboard');$('#recordLabel').textContent=active?'Stop':'Record';
 }
-function recordElapsed(){return Math.max(0,recordPosition+(recordingPlaying?(performance.now()-recordStartedAt)/1000*playbackSpeed:0))}
+function recordElapsed(){
+  if(recording&&recordingPlaying&&backingUrl){
+    const media=$('#backingAudio');
+    if(!media.paused&&!media.ended&&media.readyState>=2&&Number.isFinite(media.currentTime)){
+      // Playback follows HTMLMediaElement.currentTime. Recording must use that
+      // same clock, not performance.now(), to compensate for delayed audio
+      // startup and buffering on iOS/Safari.
+      const synced=Math.max(0,backingOffset+media.currentTime/Math.max(.01,backingPlaybackRate));
+      recordPosition=synced;
+      recordStartedAt=performance.now();
+      return synced;
+    }
+  }
+  return Math.max(0,recordPosition+(recordingPlaying?(performance.now()-recordStartedAt)/1000*playbackSpeed:0));
+}
 function syncRecordingTransport(){
   $('#recordPlay').textContent=recordingPlaying?'Ⅱ':'▶';$('#recordPlay').setAttribute('aria-label',recordingPlaying?'Pause recording timeline':'Play recording timeline');$('#recordHud').classList.toggle('playing',recordingPlaying);
 }
@@ -848,7 +888,7 @@ async function startRecording(){
   if(!editorRoot.hidden){closeEditor();if(!editorRoot.hidden)return}
   pause();enterMobileRecordMode();recordingSnapshot={time,duration,isAudio,pianoMuted,currentSourceName,title:$('#songTitle').textContent,subtitle:$('#songSubtitle').textContent,info:$('#info').textContent,emptyDisplay:$('#empty').style.display,noteCount:$('#noteCount').textContent,rangeCount:$('#rangeCount').textContent,meterWidth:$('#meterBar').style.width,audioTime:$('#audio').currentTime};
   try{ensureMediaGraph();$('#audio').volume=$('#backingAudio').volume=1;updateMediaGains();await Promise.race([context().resume(),new Promise(resolve=>setTimeout(resolve,300))])}catch(error){console.warn('Could not start audio context',error)}
-  recording=true;recordingPlaying=false;recordPosition=0;recordedNotes=[];pressedKeyboard.clear();q.clear();time=0;recordStartedAt=performance.now();syncRecordingBacking(0,false);setPianoKeyboardLabels(!mobileRecordingMode);updateBackingControls();setRecordingControls(true);enableStageQuickEdit();syncRecordingTransport();document.activeElement?.blur?.();
+  recordingBackingPlayPending=false;recordingBackingPlayToken++;recording=true;recordingPlaying=false;recordPosition=0;recordedNotes=[];pressedKeyboard.clear();q.clear();time=0;recordStartedAt=performance.now();syncRecordingBacking(0,false);setPianoKeyboardLabels(!mobileRecordingMode);updateBackingControls();setRecordingControls(true);enableStageQuickEdit();syncRecordingTransport();document.activeElement?.blur?.();
   $('#empty').style.display='none';$('#songTitle').textContent='Recording';$('#songSubtitle').textContent=backingUrl?`Ready with ${backingName}`:'';$('#recordTime').textContent='00:00';$('#clock').textContent='00:00';$('#duration').textContent=backingUrl?`/ ${format(Math.max(0,backingOffset+backingTimelineDuration()))}`:'/ REC';$('#noteCount').textContent='0';$('#rangeCount').textContent='0';$('#info').textContent='Recording paused · press Space or Play to start.';$('#meterBar').style.width='100%';
 }
 function restoreRecordingSnapshot(){
