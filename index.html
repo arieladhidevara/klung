@@ -40,7 +40,6 @@
           <button id="mobileRecordMenuToggle" class="mobile-record-menu-toggle" type="button" aria-expanded="false" aria-controls="mobileRecordOptions" aria-label="Open recording controls">☰ MENU</button>
           <span class="record-pulse" aria-hidden="true"></span>
           <strong id="recordTime">00:00</strong>
-          <button id="mobileRecordExit" class="mobile-record-exit" type="button" aria-label="Finish recording and return to normal view">EXIT ↗</button>
           <div class="mobile-record-options" id="mobileRecordOptions">
             <button id="recordPlay" class="record-transport record-play" type="button" aria-label="Play recording timeline">▶</button>
             <button id="recordRestart" class="record-transport" type="button" aria-label="Rewind recording timeline">↺</button>
@@ -56,6 +55,7 @@
               <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
             </div>
             <button id="stopRecord" class="record-stop" type="button">STOP</button>
+            <button id="mobileRecordExit" class="mobile-record-exit" type="button" aria-label="Finish and save recording, and return to normal view">EXIT RECORDING ↗</button>
           </div>
         </div>
         <div class="stage-edit-hud" id="stageEditHud" hidden>
@@ -188,6 +188,8 @@
   <audio id="audio" preload="metadata"></audio>
   <audio id="backingAudio" preload="metadata"></audio>
 </div>
+<!-- Portal for touch recording: keep the piano outside normal page layout. -->
+<section id="mobileRecordScreen" class="mobile-record-screen" aria-label="Fullscreen landscape piano recording" hidden></section>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>
