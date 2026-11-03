@@ -42,12 +42,14 @@ let backingUrl=null,backingName='',backingDuration=0,backingOffset=0,backingPlay
 let sourceMediaAsset=null,backingMediaAsset=null,liveSession=null,pendingPlayTimer=null,pendingPlayPosition=0,lastLiveSyncAt=0;
 let recording=false,recordingPlaying=false,recordPosition=0,recordStartedAt=0,recordedNotes=[],recordingSnapshot=null;
 const pressedKeyboard=new Map();
+const touchPianoPointers=new Map();
+let mobileRecordingMode=false,mobileRecordOwnsFullscreen=false;
 const nextNoteId=()=>`klung-note-${Date.now().toString(36)}-${(++noteSequence).toString(36)}`;
 const nextGroupId=()=>`klung-group-${Date.now().toString(36)}-${(++groupSequence).toString(36)}`;
 function ensureNoteIds(list=notes){for(const note of list)if(!note.id)note.id=nextNoteId();return list}
 const keyEls=new Map();
-whites.forEach((m,i)=>{const e=document.createElement('div');e.className='key';e.textContent=displayPitchName(m);e.style.setProperty('--note-color',noteColor(m));$('#piano').append(e);keyEls.set(m,e)});
-black.forEach(m=>{const after=whites.findIndex(w=>w>m);const el=document.createElement('div');el.className='key black';el.textContent=displayPitchName(m);el.style.left=`${after/whites.length*100}%`;el.style.setProperty('--note-color',noteColor(m));$('#piano').append(el);keyEls.set(m,el)});
+whites.forEach((m,i)=>{const e=document.createElement('div');e.className='key';e.dataset.pitch=String(m);e.textContent=displayPitchName(m);e.style.setProperty('--note-color',noteColor(m));$('#piano').append(e);keyEls.set(m,e)});
+black.forEach(m=>{const after=whites.findIndex(w=>w>m);const el=document.createElement('div');el.className='key black';el.dataset.pitch=String(m);el.textContent=displayPitchName(m);el.style.left=`${after/whites.length*100}%`;el.style.setProperty('--note-color',noteColor(m));$('#piano').append(el);keyEls.set(m,el)});
 function setPianoKeyboardLabels(enabled){for(const [pitch,element] of keyEls)element.textContent=enabled?PITCH_KEY_LABELS.get(pitch):displayPitchName(pitch);$('#piano').classList.toggle('computer-keys',enabled)}
 // C1-B1 are layout labels; synth playback uses the brighter C4-B4 register.
 const freq=n=>440*Math.pow(2,((n+36)-69)/12);
@@ -182,7 +184,7 @@ function setBackingTimelineLength(length,persist=false){
   if(!backingUrl||!backingDuration)return;const target=clamp(Number(length)||backingDuration,backingDuration/4,backingDuration/.25);backingPlaybackRate=Math.round(backingDuration/target*1000)/1000;$('#backingAudio').playbackRate=backingPlaybackRate*playbackSpeed;updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing);if(persist)persistProject();
 }
 function updateBackingControls(){
-  const lengthInput=$('#backingLength');$('#backingName').textContent=backingUrl?backingName:'NO BACKSOUND';$('#backingName').title=backingUrl?`${backingName} · ${backingPlaybackRate.toFixed(2)}× speed`:'';$('#recordBackingLabel').textContent=backingUrl?backingName.slice(0,28):'Upload backsound';$('#backingOffset').value=backingOffset.toFixed(2);lengthInput.value=backingUrl?backingTimelineDuration().toFixed(2):'0';lengthInput.min=backingUrl?(backingDuration/4).toFixed(2):'.25';lengthInput.max=backingUrl?(backingDuration*4).toFixed(2):'';for(const id of ['backingRemove','backingNudgeBack','backingNudgeForward','backingLength','backingResetSize'])$('#'+id).disabled=!backingUrl;syncMuteButton();
+  const lengthInput=$('#backingLength');$('#backingName').textContent=backingUrl?backingName:'NO BACKSOUND';$('#backingName').title=backingUrl?`${backingName} · ${backingPlaybackRate.toFixed(2)}× speed`:'';$('#recordBackingLabel').textContent=backingUrl?backingName.slice(0,28):'Upload backsound';$('#mobileRecordBackingName').textContent=backingUrl?backingName:'NO BACKSOUND';$('#mobileRecordBackingName').title=backingUrl?backingName:'';$('#backingOffset').value=backingOffset.toFixed(2);lengthInput.value=backingUrl?backingTimelineDuration().toFixed(2):'0';lengthInput.min=backingUrl?(backingDuration/4).toFixed(2):'.25';lengthInput.max=backingUrl?(backingDuration*4).toFixed(2):'';for(const id of ['backingRemove','backingNudgeBack','backingNudgeForward','backingLength','backingResetSize'])$('#'+id).disabled=!backingUrl;syncMuteButton();
 }
 function clearBackingTrack(recalculate=true){
   const media=$('#backingAudio');media.pause();media.removeAttribute('src');media.load();if(backingUrl)URL.revokeObjectURL(backingUrl);
@@ -671,19 +673,77 @@ function finishKeyboardNote(code,elapsed=recordElapsed()){
   pressed.note.duration=Math.max(.08,Math.round((elapsed-pressed.note.start)*1000)/1000);stopKeyboardVoice(pressed.voice);pressedKeyboard.delete(code);
 }
 function finishAllKeyboardNotes(elapsed=recordElapsed()){for(const code of [...pressedKeyboard.keys()])finishKeyboardNote(code,elapsed)}
+function startRecordedPitch(pitch,code){
+  if(!recording||!Number.isInteger(pitch)||pitch<RANGE_MIN||pitch>RANGE_MAX||pressedKeyboard.has(code))return;
+  const start=Math.round(recordElapsed()*1000)/1000;
+  const note={id:nextNoteId(),pitch,sourcePitch:pitch+36,start,duration:.08,amplitude:.9};
+  recordedNotes.push(note);q.add(note.id);pressedKeyboard.set(code,{note,voice:startKeyboardVoice(pitch)});
+  $('#noteCount').textContent=recordedNotes.length;
+}
 function startRecordedNote(event){
-  const pitch=KEYBOARD_PITCHES.get(event.code);if(pitch===undefined||event.repeat||event.ctrlKey||event.metaKey||event.altKey||pressedKeyboard.has(event.code))return;
-  event.preventDefault();const start=Math.round(recordElapsed()*1000)/1000;
-  const note={id:nextNoteId(),pitch,sourcePitch:pitch+36,start,duration:.08,amplitude:.9};recordedNotes.push(note);
-  q.add(note.id);pressedKeyboard.set(event.code,{note,voice:startKeyboardVoice(pitch)});$('#noteCount').textContent=recordedNotes.length;
+  const pitch=KEYBOARD_PITCHES.get(event.code);
+  if(pitch===undefined||event.repeat||event.ctrlKey||event.metaKey||event.altKey)return;
+  event.preventDefault();startRecordedPitch(pitch,event.code);
+}
+// The browser touch keyboard supports independent pointers, including simultaneous notes.
+$('#piano').addEventListener('pointerdown',event=>{
+  if(!recording||!mobileRecordingMode||event.button!==0)return;
+  const key=event.target.closest('.key');if(!key||!$('#piano').contains(key))return;
+  const pitch=Number(key.dataset.pitch);if(!Number.isInteger(pitch))return;
+  event.preventDefault();
+  if(!recordingPlaying){
+    // The first piano touch can start the timeline; users needn't reach Play first.
+    void context().resume().catch(()=>{});
+    recordStartedAt=performance.now();recordingPlaying=true;time=recordPosition;
+    syncRecordingBacking(recordPosition,true);syncRecordingTransport();
+    $('#info').textContent='Recording from touch piano.';
+  }
+  const code=`Touch-${event.pointerId}`;touchPianoPointers.set(event.pointerId,code);
+  startRecordedPitch(pitch,code);
+  try{key.setPointerCapture(event.pointerId)}catch{}
+},{passive:false});
+function finishTouchPianoPointer(event){
+  const code=touchPianoPointers.get(event.pointerId);if(!code)return;
+  touchPianoPointers.delete(event.pointerId);finishKeyboardNote(code);
+}
+for(const name of ['pointerup','pointercancel','lostpointercapture'])$('#piano').addEventListener(name,finishTouchPianoPointer);
+function isPhoneRecordingViewport(){
+  return window.matchMedia('(pointer:coarse)').matches&&Math.min(window.innerWidth,window.innerHeight)<=900;
+}
+function enterMobileRecordMode(){
+  mobileRecordingMode=isPhoneRecordingViewport();
+  if(!mobileRecordingMode)return;
+  document.body.classList.add('mobile-record-mode');
+  document.body.classList.remove('performance-mode');
+  // Request while the Record tap still has user activation; Safari may reject it.
+  try{
+    if(!document.fullscreenElement&&document.documentElement.requestFullscreen){
+      Promise.resolve(document.documentElement.requestFullscreen({navigationUI:'hide'}))
+        .then(()=>{
+          if(!mobileRecordingMode){void document.exitFullscreen?.().catch(()=>{});return}
+          mobileRecordOwnsFullscreen=true;
+          try{void screen.orientation?.lock?.('landscape')?.catch(()=>{})}catch{}
+        }).catch(()=>{});
+    }else{
+      try{void screen.orientation?.lock?.('landscape')?.catch(()=>{})}catch{}
+    }
+  }catch{}
+}
+function leaveMobileRecordMode(){
+  if(!mobileRecordingMode)return;
+  mobileRecordingMode=false;document.body.classList.remove('mobile-record-mode');
+  touchPianoPointers.clear();
+  try{screen.orientation?.unlock?.()}catch{}
+  if(mobileRecordOwnsFullscreen&&document.fullscreenElement)void document.exitFullscreen?.().catch(()=>{});
+  mobileRecordOwnsFullscreen=false;
 }
 async function startRecording(){
   if(recording)return;
   disableStageQuickEdit();
   if(!editorRoot.hidden){closeEditor();if(!editorRoot.hidden)return}
-  pause();recordingSnapshot={time,duration,isAudio,pianoMuted,currentSourceName,title:$('#songTitle').textContent,subtitle:$('#songSubtitle').textContent,info:$('#info').textContent,emptyDisplay:$('#empty').style.display,noteCount:$('#noteCount').textContent,rangeCount:$('#rangeCount').textContent,meterWidth:$('#meterBar').style.width,audioTime:$('#audio').currentTime};
+  pause();enterMobileRecordMode();recordingSnapshot={time,duration,isAudio,pianoMuted,currentSourceName,title:$('#songTitle').textContent,subtitle:$('#songSubtitle').textContent,info:$('#info').textContent,emptyDisplay:$('#empty').style.display,noteCount:$('#noteCount').textContent,rangeCount:$('#rangeCount').textContent,meterWidth:$('#meterBar').style.width,audioTime:$('#audio').currentTime};
   try{ensureMediaGraph();$('#audio').volume=$('#backingAudio').volume=1;updateMediaGains();await Promise.race([context().resume(),new Promise(resolve=>setTimeout(resolve,300))])}catch(error){console.warn('Could not start audio context',error)}
-  recording=true;recordingPlaying=false;recordPosition=0;recordedNotes=[];pressedKeyboard.clear();q.clear();time=0;recordStartedAt=performance.now();syncRecordingBacking(0,false);setPianoKeyboardLabels(true);setRecordingControls(true);enableStageQuickEdit();syncRecordingTransport();document.activeElement?.blur?.();
+  recording=true;recordingPlaying=false;recordPosition=0;recordedNotes=[];pressedKeyboard.clear();q.clear();time=0;recordStartedAt=performance.now();syncRecordingBacking(0,false);setPianoKeyboardLabels(!mobileRecordingMode);setRecordingControls(true);updateBackingControls();enableStageQuickEdit();syncRecordingTransport();document.activeElement?.blur?.();
   $('#empty').style.display='none';$('#songTitle').textContent='Recording';$('#songSubtitle').textContent=backingUrl?`Ready with ${backingName}`:'';$('#recordTime').textContent='00:00';$('#clock').textContent='00:00';$('#duration').textContent=backingUrl?`/ ${format(Math.max(0,backingOffset+backingTimelineDuration()))}`:'/ REC';$('#noteCount').textContent='0';$('#rangeCount').textContent='0';$('#info').textContent='Recording paused · press Space or Play to start.';$('#meterBar').style.width='100%';
 }
 function restoreRecordingSnapshot(){
@@ -691,7 +751,7 @@ function restoreRecordingSnapshot(){
   time=snapshot.time;duration=snapshot.duration;isAudio=snapshot.isAudio;pianoMuted=snapshot.pianoMuted;currentSourceName=snapshot.currentSourceName;$('#songTitle').textContent=snapshot.title;$('#songSubtitle').textContent=snapshot.subtitle;$('#empty').style.display=snapshot.emptyDisplay;$('#noteCount').textContent=snapshot.noteCount;$('#rangeCount').textContent=snapshot.rangeCount;$('#meterBar').style.width=snapshot.meterWidth;if(isAudio)$('#audio').currentTime=snapshot.audioTime;recalculateDuration();time=clamp(time,0,duration);syncTimelineMedia(time,false);syncMuteButton();$('#info').textContent='No notes recorded.';recordingSnapshot=null;updateClock();if(notes.length)enableStageQuickEdit();else disableStageQuickEdit();
 }
 function stopRecording(){
-  if(!recording)return;const elapsed=recordElapsed();finishAllKeyboardNotes(elapsed);recordPosition=elapsed;recordingPlaying=false;syncRecordingBacking(elapsed,false);syncRecordingTransport();recording=false;setPianoKeyboardLabels(false);setRecordingControls(false);
+  if(!recording)return;const elapsed=recordElapsed();finishAllKeyboardNotes(elapsed);recordPosition=elapsed;recordingPlaying=false;syncRecordingBacking(elapsed,false);syncRecordingTransport();recording=false;setPianoKeyboardLabels(false);setRecordingControls(false);leaveMobileRecordMode();
   if(!recordedNotes.length){restoreRecordingSnapshot();return}
   notes=recordedNotes.map(note=>({...note})).sort((a,b)=>a.start-b.start);transposes=[];sourceDuration=Math.max(...notes.map(note=>note.start+note.duration))+.45;time=0;isAudio=false;currentSourceName='keyboard-recording';
   clearSourceMedia();
@@ -708,6 +768,8 @@ $('#projectFile').addEventListener('change',event=>{loadFile(event.target.files?
 $('#backingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value=''});
 $('#recordBackingFile').addEventListener('click',()=>{if(recordingPlaying)toggleRecordingPlayback()});
 $('#recordBackingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value=''});
+$('#mobileRecordBackingFile').addEventListener('click',()=>{if(recordingPlaying)void toggleRecordingPlayback()});
+$('#mobileRecordBackingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value=''});
 function shiftBacking(seconds){if(!backingUrl)return;backingOffset=roundTime(Math.max(-Math.max(0,backingTimelineDuration()-.05),backingOffset+seconds));updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing);persistProject();$('#info').textContent=`Backsound starts at ${backingOffset.toFixed(2)}s.`}
 $('#backingNudgeBack').onclick=()=>shiftBacking(-.1);$('#backingNudgeForward').onclick=()=>shiftBacking(.1);
 $('#backingOffset').addEventListener('change',event=>{backingOffset=roundTime(Number(event.target.value)||0);updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing);persistProject();$('#info').textContent=`Backsound starts at ${backingOffset.toFixed(2)}s.`});
@@ -724,7 +786,7 @@ $('#lead').addEventListener('input',e=>setPlaybackSpeed(e.target.value));
 $('#volume').addEventListener('input',e=>{$('#volText').textContent=Math.round(e.target.value*100)+'%';if(mediaGraph){$('#audio').volume=$('#backingAudio').volume=1;updateMediaGains()}else{$('#audio').volume=$('#backingAudio').volume=Number(e.target.value)}});
 $('#audio').addEventListener('ended',()=>{if(playing&&duration<=sourceDuration+.05){playing=false;time=duration;syncTimelineMedia(time,false);syncPlayButtons();updateClock()}});
 $('#fullscreen').onclick=async()=>{if(document.fullscreenElement){await document.exitFullscreen()}else{document.body.classList.add('performance-mode');try{await document.documentElement.requestFullscreen()}catch(e){document.body.classList.remove('performance-mode');$('#info').textContent='Fullscreen unavailable: '+e.message}}};
-document.addEventListener('fullscreenchange',()=>{document.body.classList.toggle('performance-mode',Boolean(document.fullscreenElement))});
+document.addEventListener('fullscreenchange',()=>{document.body.classList.toggle('performance-mode',Boolean(document.fullscreenElement)&&!mobileRecordingMode)});
 document.addEventListener('keydown',e=>{
   if(liveSession?.isMobile)return;
   if(noteEditingActive()){
