@@ -360,7 +360,18 @@ async function saveProjectFile(){
     const blob=new Blob([JSON.stringify(project)],{type:'application/json'}),link=document.createElement('a'),safeName=(project.title||'klung-project').replace(/[^a-z0-9-_]+/gi,'-').replace(/^-|-$/g,'').toLowerCase()||'klung-project';link.href=URL.createObjectURL(blob);link.download=`${safeName}.klung-project.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),2000);$('#info').textContent=`Project saved · notes${sourceMediaAsset?' + song':''}${backingMediaAsset?' + backsound':''} + playback settings.`;
   }catch(error){console.error(error);$('#info').textContent='Could not save project: '+(error?.message||error)}finally{button.innerHTML=original;button.disabled=false}
 }
-function drawExportFrame(target,timeline,exportNotes){
+function drawTransposeCue(c,cue,timeline,width,hitY,pixelsPerSecond,topLimit=0){
+  const dt=cue.start-timeline;if(dt>lead||dt<-TRANSPOSE_LENGTH)return false;
+  const active=dt<=.06&&dt>=-TRANSPOSE_LENGTH,headY=hitY-dt*pixelsPerSecond,barHeight=Math.max(40,TRANSPOSE_LENGTH*pixelsPerSecond),barY=headY-barHeight;
+  c.save();c.beginPath();c.rect(0,topLimit,width,Math.max(0,hitY-topLimit+30));c.clip();
+  c.globalAlpha=active?.96:dt>0?.63:.38;
+  const fill=c.createLinearGradient(0,barY,0,headY);fill.addColorStop(0,'rgba(255,207,82,.15)');fill.addColorStop(1,'rgba(255,207,82,.45)');
+  c.fillStyle=fill;c.fillRect(0,barY,width,barHeight);c.strokeStyle='#ffcf52';c.lineWidth=3;c.strokeRect(1,barY+1,width-2,Math.max(1,barHeight-2));
+  c.shadowColor='#ffcf52';c.shadowBlur=active?32:9;c.fillStyle='#fff1b9';c.font=`900 ${Math.max(17,Math.min(35,width/21))}px Outfit, sans-serif`;c.textAlign='center';c.textBaseline='middle';
+  c.fillText('TRANSPOSE',width/2,Math.max(barY+20,Math.min(headY-17,(barY+headY)/2)));c.restore();
+  return active;
+}
+function drawExportFrame(target,timeline,exportNotes,exportTransposes){
   const c=target.getContext('2d'),w=target.width,h=target.height,headerH=72,keysH=104,footerH=28,fieldY=headerH,fieldH=h-headerH-keysH-footerH,lineY=fieldY+fieldH-34,travel=fieldH-58,lane=w/whites.length;
   c.clearRect(0,0,w,h);c.fillStyle='#101a19';c.fillRect(0,0,w,h);
   c.fillStyle='#172423';c.fillRect(0,0,w,headerH);c.strokeStyle='rgba(255,255,255,.1)';c.beginPath();c.moveTo(0,headerH-.5);c.lineTo(w,headerH-.5);c.stroke();
@@ -380,6 +391,7 @@ function drawExportFrame(target,timeline,exportNotes){
     const shade=c.createLinearGradient(x-width/2,0,x+width/2,0);shade.addColorStop(0,'rgba(0,0,0,.16)');shade.addColorStop(.4,'rgba(255,255,255,.12)');shade.addColorStop(1,'rgba(0,0,0,.08)');c.fillStyle=shade;round(c,x-width/2,topY,width,noteH,radius);c.fill();c.fillStyle='rgba(255,255,255,.74)';round(c,x-width/2+2,headY-4,width-4,3,1.5);c.fill();
     c.restore();const impactSpan=.16*Math.max(.5,playbackSpeed);if(dt<=.045*playbackSpeed&&dt>=-impactSpan)hitEffects.push({x,color,strength:1-clamp(Math.abs(dt)/impactSpan,0,1)});
   }
+  for(const cue of exportTransposes)if(drawTransposeCue(c,cue,timeline,w,lineY,travel/lead,fieldY))for(const pitch of all)activePitches.add(pitch);
   c.fillStyle='rgba(235,192,135,.12)';c.fillRect(0,lineY-9,w,20);c.shadowColor='#e9b77d';c.shadowBlur=13;c.fillStyle='#ecc28b';c.fillRect(0,lineY,w,3);c.shadowBlur=0;c.fillStyle='#e0bf91';c.font='700 12px DM Sans, sans-serif';c.textAlign='left';c.fillText('HIT',18,lineY-15);
   for(const effect of hitEffects)drawHitImpact(c,effect.x,lineY,effect.color,effect.strength,1.35);
   const keyY=fieldY+fieldH,keyW=w/whites.length;
@@ -397,8 +409,8 @@ function setExportingControls(active){
 async function exportVideo(){
   if(exporting||!notes.length)return;const mimeType=videoMimeType();
   if(!mimeType||!HTMLCanvasElement.prototype.captureStream){$('#info').textContent='Video export needs a current Chrome, Edge, Firefox, or Safari browser.';return}
-  pause();const restoreTime=time,exportNotes=notes.map(note=>({...note})).sort((a,b)=>a.start-b.start),timelineStart=exportNotes[0].start-lead,timelineEnd=Math.max(noteTimelineEnd(exportNotes)+.75,isAudio?sourceDuration:0,backingUrl?backingOffset+backingTimelineDuration():0),total=Math.max(.5,timelineEnd-timelineStart);
-  const exportCanvas=document.createElement('canvas');exportCanvas.width=1280;exportCanvas.height=720;drawExportFrame(exportCanvas,timelineStart,exportNotes);const canvasStream=exportCanvas.captureStream(30),audio=context(),graph=ensureMediaGraph(),mix=audio.createMediaStreamDestination();
+  pause();const restoreTime=time,exportNotes=notes.map(note=>({...note})).sort((a,b)=>a.start-b.start),timelineStart=Math.min(exportNotes[0].start,...transposes.map(cue=>cue.start))-lead,timelineEnd=Math.max(noteTimelineEnd(exportNotes)+.75,transposeTimelineEnd(transposes)+.75,isAudio?sourceDuration:0,backingUrl?backingOffset+backingTimelineDuration():0),total=Math.max(.5,timelineEnd-timelineStart);
+  const exportTransposes=transposes.map(cue=>({...cue}));const exportCanvas=document.createElement('canvas');exportCanvas.width=1280;exportCanvas.height=720;drawExportFrame(exportCanvas,timelineStart,exportNotes,exportTransposes);const canvasStream=exportCanvas.captureStream(30),audio=context(),graph=ensureMediaGraph(),mix=audio.createMediaStreamDestination();
   $('#audio').volume=$('#backingAudio').volume=1;updateMediaGains();graph.primaryGain.connect(mix);graph.backingGain.connect(mix);exportAudioDestination=mix;
   const stream=new MediaStream([...canvasStream.getVideoTracks(),...mix.stream.getAudioTracks()]),recorder=new MediaRecorder(stream,{mimeType,videoBitsPerSecond:8_000_000}),chunks=[];recorder.ondataavailable=event=>{if(event.data.size)chunks.push(event.data)};
   const stopped=new Promise((resolve,reject)=>{recorder.onstop=resolve;recorder.onerror=event=>reject(event.error||new Error('Video recorder failed.'))});
@@ -409,7 +421,7 @@ async function exportVideo(){
       const frame=now=>{
         const timeline=Math.min(timelineEnd,timelineStart+(now-realStart)/1000*playbackSpeed);time=clamp(timeline,0,duration);syncTimelineMedia(timeline,true,false);
         if(!isAudio){for(const note of exportNotes)if(note.start>previousTimeline&&note.start<=timeline)beep(note.pitch,0,Math.min(note.duration/playbackSpeed,3))}
-        drawExportFrame(exportCanvas,timeline,exportNotes);previousTimeline=timeline;const progress=clamp((timeline-timelineStart)/total,0,1),percent=Math.round(progress*100);button.lastChild.textContent=` ${percent}%`;$('#info').textContent=`Rendering video in real time · ${percent}%`;$('#meterBar').style.width=`${percent}%`;
+        drawExportFrame(exportCanvas,timeline,exportNotes,exportTransposes);previousTimeline=timeline;const progress=clamp((timeline-timelineStart)/total,0,1),percent=Math.round(progress*100);button.lastChild.textContent=` ${percent}%`;$('#info').textContent=`Rendering video in real time · ${percent}%`;$('#meterBar').style.width=`${percent}%`;
         if(timeline>=timelineEnd){resolve();return}requestAnimationFrame(frame);
       };requestAnimationFrame(frame);
     });
@@ -420,13 +432,14 @@ async function exportVideo(){
   }
 }
 function updateEditorInspector(){
-  const selected=selectedEditorNotes(),note=selected.length===1?selected[0]:null,hasSelection=selected.length>0,grouped=selected.length>1&&selected.every(item=>item.groupId&&item.groupId===selected[0].groupId);
+  const selected=selectedEditorNotes(),note=selected.length===1?selected[0]:null,cue=!editorRoot.hidden?editorTransposes.find(item=>item.id===selectedTransposeId):null,hasSelection=selected.length>0,grouped=selected.length>1&&selected.every(item=>item.groupId&&item.groupId===selected[0].groupId);
+  $('#transposeField').hidden=!cue;$('#editorTransposeAt').disabled=!cue;if(cue)$('#editorTransposeAt').value=cue.start.toFixed(2);
   for(const element of [$('#editorPitch'),$('#editorStart'),$('#editorLength')])element.disabled=!note;
-  for(const element of [$('#editorDelete'),$('#editorCopy')])element.disabled=!hasSelection;
+  $('#editorDelete').disabled=!hasSelection&&!cue;$('#editorCopy').disabled=!hasSelection;
   $('#editorPaste').disabled=!noteClipboard;
   $('#stageEditCopy').disabled=!hasSelection;$('#stageEditDelete').disabled=!hasSelection;$('#stageEditPaste').disabled=!noteClipboard;
   updateEditorHistoryControls();
-  const selectionText=selected.length>1?`${selected.length} NOTES ${grouped?'GROUPED':'SELECTED'}`:note?`${displayPitchName(note.pitch)}  ·  ${note.start.toFixed(2)}s`:'SELECT NOTES';
+  const selectionText=cue?`TRANSPOSE · ${cue.start.toFixed(2)}s`:selected.length>1?`${selected.length} NOTES ${grouped?'GROUPED':'SELECTED'}`:note?`${displayPitchName(note.pitch)}  ·  ${note.start.toFixed(2)}s`:'SELECT NOTES';
   $('#liveSelection').textContent=selectionText;$('#stageEditSelection').textContent=selectionText;
   if(!note){$('#editorPitch').value=String(RANGE_MIN);$('#editorStart').value='';$('#editorLength').value='';return}
   $('#editorPitch').value=String(note.pitch);$('#editorStart').value=note.start.toFixed(2);$('#editorLength').value=note.duration.toFixed(2);
@@ -441,21 +454,22 @@ function disableStageQuickEdit(){
   if(!stageQuickEdit)return;stageQuickEdit=false;selectedNoteIds.clear();editorDrag=null;noteHitRegions=[];hideNoteContextMenu();$('#stageEditHud').hidden=true;$('#stage').classList.remove('quick-editing');updateEditorInspector();
 }
 function selectEditorNote(id,additive=false){
+  selectedTransposeId=null;
   if(!id)selectedNoteIds.clear();
   else{const ids=groupedNoteIds(id);if(additive){const remove=ids.every(groupedId=>selectedNoteIds.has(groupedId));for(const groupedId of ids)remove?selectedNoteIds.delete(groupedId):selectedNoteIds.add(groupedId)}else selectedNoteIds=new Set(ids)}
   updateEditorInspector();
 }
 function openEditor(){
-  if(!notes.length)return;const carriedSelection=new Set(selectedNoteIds);disableStageQuickEdit();editorNotes=notes.map(note=>({...note,id:note.id||nextNoteId()}));selectedNoteIds=new Set([...carriedSelection].filter(id=>editorNotes.some(note=>note.id===id)));editorDirty=false;editorDrag=null;arrangementDrag=null;arrangementZoom=1;arrangementViewportWidth=0;arrangementCanvas.style.width='100%';arrangementScroller.scrollLeft=0;editorRoot.hidden=false;document.body.classList.add('editor-open');$('#stage').classList.add('live-editing');$('#editNotes').classList.add('active');$('#editNotes').lastChild.textContent=' EDITING';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=true;resetEditorHistory();updateBackingControls();updateEditorInspector();syncPlayButtons();requestAnimationFrame(renderArrangement);
+  if(!notes.length)return;const carriedSelection=new Set(selectedNoteIds);disableStageQuickEdit();editorNotes=notes.map(note=>({...note,id:note.id||nextNoteId()}));editorTransposes=transposes.map(cue=>({...cue}));selectedTransposeId=null;selectedNoteIds=new Set([...carriedSelection].filter(id=>editorNotes.some(note=>note.id===id)));editorDirty=false;editorDrag=null;arrangementDrag=null;arrangementZoom=1;arrangementViewportWidth=0;arrangementCanvas.style.width='100%';arrangementScroller.scrollLeft=0;editorRoot.hidden=false;document.body.classList.add('editor-open');$('#stage').classList.add('live-editing');$('#editNotes').classList.add('active');$('#editNotes').lastChild.textContent=' EDITING';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=true;resetEditorHistory();updateBackingControls();updateEditorInspector();syncPlayButtons();requestAnimationFrame(renderArrangement);
 }
 function closeEditor(force=false){
   if(!force&&editorDirty&&!window.confirm('Discard your unsaved note edits?'))return;
   const discarded=editorDirty;if(discarded){q.clear();for(const note of notes)if(note.start<=time+.06)q.add(note.id)}editorDirty=false;
-  editorRoot.hidden=true;hideNoteContextMenu();document.body.classList.remove('editor-open');$('#stage').classList.remove('live-editing');$('#editNotes').classList.remove('active');$('#editNotes').lastChild.textContent=' EDIT';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=!notes.length;selectedNoteIds.clear();editorDrag=null;arrangementDrag=null;noteHitRegions=[];arrangementHitRegions=[];editorHistory=[];editorHistoryIndex=-1;updateEditorHistoryControls();recalculateDuration();updateClock();
+  editorRoot.hidden=true;hideNoteContextMenu();document.body.classList.remove('editor-open');$('#stage').classList.remove('live-editing');$('#editNotes').classList.remove('active');$('#editNotes').lastChild.textContent=' EDIT';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=!notes.length;selectedNoteIds.clear();editorDrag=null;arrangementDrag=null;noteHitRegions=[];arrangementHitRegions=[];editorHistory=[];editorHistoryIndex=-1;selectedTransposeId=null;editorTransposes=[];updateEditorHistoryControls();recalculateDuration();updateClock();
 }
 function closeEditorToStage(){closeEditor();if(editorRoot.hidden)enableStageQuickEdit()}
 function saveEditorChanges(){
-  notes=editorNotes.map(note=>({...note})).sort((a,b)=>a.start-b.start);if(!isAudio)sourceDuration=Math.max(sourceDuration,noteTimelineEnd(notes)+.45);recalculateDuration();editorDirty=false;persistProject();closeEditor(true);enableStageQuickEdit();$('#noteCount').textContent=notes.length;$('#rangeCount').textContent=notes.length;$('#duration').textContent='/ '+format(duration);$('#info').textContent='Edits saved. Notes remain editable on the stage.';liveSession?.refresh();
+  notes=editorNotes.map(note=>({...note})).sort((a,b)=>a.start-b.start);transposes=editorTransposes.map(cue=>({...cue})).sort((a,b)=>a.start-b.start);if(!isAudio)sourceDuration=Math.max(sourceDuration,noteTimelineEnd(notes)+.45);recalculateDuration();editorDirty=false;persistProject();closeEditor(true);enableStageQuickEdit();$('#noteCount').textContent=notes.length;$('#rangeCount').textContent=notes.length;$('#duration').textContent='/ '+format(duration);$('#info').textContent='Edits saved. Notes remain editable on the stage.';liveSession?.refresh();
 }
 async function copySelectedEditorNote(){
   const selected=selectedEditorNotes().sort((a,b)=>a.start-b.start||a.pitch-b.pitch);if(!selected.length)return;const firstStart=selected[0].start;
@@ -467,7 +481,16 @@ function pasteEditorNote(){
   const target=editableNotes();target.push(...pasted);selectedNoteIds=new Set(pasted.map(note=>note.id));for(const note of pasted)refreshEditedNoteSchedule(note);if(!recording)recalculateDuration();commitEditorAction();updateEditorInspector();const message=`Pasted ${pasted.length} note${pasted.length===1?'':'s'} at ${start.toFixed(2)}s.`;if(stageQuickEdit)commitStageQuickEdit(message);else $('#info').textContent=message;
 }
 function deleteSelectedEditorNote(){
+  if(selectedTransposeId&&!editorRoot.hidden){
+    beginEditorAction();editorTransposes=editorTransposes.filter(cue=>cue.id!==selectedTransposeId);selectedTransposeId=null;recalculateDuration();commitEditorAction();updateEditorInspector();$('#info').textContent='Transpose cue removed.';return;
+  }
   if(!selectedNoteIds.size)return;beginEditorAction();const count=selectedNoteIds.size;for(const id of selectedNoteIds)q.delete(id);if(recording)recordedNotes=recordedNotes.filter(note=>!selectedNoteIds.has(note.id));else if(editorRoot.hidden)notes=notes.filter(note=>!selectedNoteIds.has(note.id));else editorNotes=editorNotes.filter(note=>!selectedNoteIds.has(note.id));selectedNoteIds.clear();if(!recording)recalculateDuration();commitEditorAction();updateEditorInspector();if(stageQuickEdit)commitStageQuickEdit(`Deleted ${count} note${count===1?'':'s'}.`);
+}
+function addTransposeCue(){
+  if(editorRoot.hidden)return;beginEditorAction();
+  const cue={id:nextTransposeId(),start:roundTime(Math.max(0,time))};
+  editorTransposes.push(cue);editorTransposes.sort((a,b)=>a.start-b.start);selectedTransposeId=cue.id;selectedNoteIds.clear();
+  recalculateDuration();commitEditorAction();updateEditorInspector();$('#info').textContent=`Transpose cue added at ${cue.start.toFixed(2)}s. Drag it in the CUES lane to reposition.`;
 }
 function hideNoteContextMenu(){noteContextMenu.hidden=true}
 function showNoteContextMenu(event,noteId){
@@ -490,9 +513,9 @@ function moveSelectedNotes(drag,desiredStart,desiredPitch){
 }
 function pitchAtX(x,width){return all.reduce((closest,pitch)=>Math.abs(laneCenter(pitch,width)-x)<Math.abs(laneCenter(closest,width)-x)?pitch:closest,RANGE_MIN)}
 function arrangementGeometry(width,height){
-  const gutter=clamp(width*.115,82,122),left=gutter+13,right=18,rulerBottom=30,backingY=38,backingH=clamp(height*.16,42,65),notesY=backingY+backingH+20,notesBottom=Math.max(notesY+96,height-12),laneH=(notesBottom-notesY)/all.length;
-  const first=Math.min(0,backingUrl?backingOffset:0)-.25,last=Math.max(1,duration,noteTimelineEnd(editorNotes),backingUrl?backingOffset+backingTimelineDuration():0)+.35,span=Math.max(1,last-first),timelineWidth=Math.max(80,width-left-right),pps=timelineWidth/span;
-  return {width,height,gutter,left,right,rulerBottom,backingY,backingH,notesY,notesBottom,laneH,first,last,span,timelineWidth,pps,xAt:value=>left+(value-first)*pps,timeAt:x=>first+(x-left)/pps};
+  const gutter=clamp(width*.115,82,122),left=gutter+13,right=18,rulerBottom=30,backingY=38,backingH=clamp(height*.16,42,65),transposeY=backingY+backingH+5,transposeH=27,notesY=transposeY+transposeH+14,notesBottom=Math.max(notesY+96,height-12),laneH=(notesBottom-notesY)/all.length;
+  const first=Math.min(0,backingUrl?backingOffset:0)-.25,last=Math.max(1,duration,noteTimelineEnd(editorNotes),transposeTimelineEnd(editorTransposes),backingUrl?backingOffset+backingTimelineDuration():0)+.35,span=Math.max(1,last-first),timelineWidth=Math.max(80,width-left-right),pps=timelineWidth/span;
+  return {width,height,gutter,left,right,rulerBottom,backingY,backingH,transposeY,transposeH,notesY,notesBottom,laneH,first,last,span,timelineWidth,pps,xAt:value=>left+(value-first)*pps,timeAt:x=>first+(x-left)/pps};
 }
 function arrangementPitchAtY(y,geometry){return clamp(RANGE_MAX-Math.floor((y-geometry.notesY)/geometry.laneH),RANGE_MIN,RANGE_MAX)}
 function arrangementTickStep(span){return [0.25,.5,1,2,5,10,15,30,60,120,300].find(step=>span/step<=11)||600}
@@ -512,7 +535,7 @@ function renderArrangement(){
   if(editorRoot.hidden)return;syncArrangementCanvasWidth();const bounds=arrangementCanvas.getBoundingClientRect(),w=bounds.width,h=bounds.height,dpr=Math.min(window.devicePixelRatio||1,2,8192/Math.max(w,h));if(!w||!h)return;
   if(arrangementCanvas.width!==Math.round(w*dpr)||arrangementCanvas.height!==Math.round(h*dpr)){arrangementCanvas.width=Math.round(w*dpr);arrangementCanvas.height=Math.round(h*dpr)}
   const c=arrangementCtx,g=arrangementGeometry(w,h);c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);c.fillStyle='#0b1413';c.fillRect(0,0,w,h);arrangementHitRegions=[];
-  c.fillStyle='#71847e';c.font='800 9px DM Sans';c.textAlign='right';c.textBaseline='middle';c.fillText('BACKSOUND',g.gutter,g.backingY+g.backingH/2);c.fillText('NOTES',g.gutter,g.notesY+12);
+  c.fillStyle='#71847e';c.font='800 9px DM Sans';c.textAlign='right';c.textBaseline='middle';c.fillText('BACKSOUND',g.gutter,g.backingY+g.backingH/2);c.fillText('CUES',g.gutter,g.transposeY+g.transposeH/2);c.fillText('NOTES',g.gutter,g.notesY+12);
   const step=arrangementTickStep(g.span/arrangementZoom),firstTick=Math.ceil(g.first/step)*step;c.textAlign='center';c.textBaseline='top';c.font='700 8px DM Sans';
   for(let tick=firstTick;tick<=g.last+.001;tick+=step){const x=g.xAt(tick);c.strokeStyle='rgba(255,255,255,.09)';c.beginPath();c.moveTo(x,g.rulerBottom);c.lineTo(x,g.notesBottom);c.stroke();c.fillStyle='#70827c';c.fillText(tick<0?`−${Math.abs(tick).toFixed(step<1?1:0)}s`:`${tick.toFixed(step<1?1:0)}s`,x,11)}
   c.fillStyle='#101d1b';c.fillRect(g.left,g.backingY,g.timelineWidth,g.backingH);c.strokeStyle='#2d403b';c.strokeRect(g.left+.5,g.backingY+.5,g.timelineWidth-1,g.backingH-1);
@@ -520,6 +543,13 @@ function renderArrangement(){
     const x=g.xAt(backingOffset),barW=Math.max(8,backingTimelineDuration()*g.pps);c.fillStyle='#275d55';c.beginPath();c.roundRect(x,g.backingY+7,barW,g.backingH-14,6);c.fill();c.strokeStyle='#6dd5c5';c.lineWidth=1.5;c.stroke();c.save();c.beginPath();c.rect(x+3,g.backingY+10,Math.max(0,barW-6),g.backingH-20);c.clip();c.strokeStyle='rgba(176,255,240,.64)';c.lineWidth=1;
     for(let px=x+7,index=0;px<x+barW-5;px+=5,index++){const amp=(.2+Math.abs(Math.sin(index*.73))* .75)*(g.backingH-25)/2;c.beginPath();c.moveTo(px,g.backingY+g.backingH/2-amp);c.lineTo(px,g.backingY+g.backingH/2+amp);c.stroke()}c.restore();c.fillStyle='#d6fff8';c.font='800 9px DM Sans';c.textAlign='left';c.textBaseline='middle';c.fillText(`${backingName.slice(0,28)} · ${backingPlaybackRate.toFixed(2)}×`,x+9,g.backingY+g.backingH/2);c.fillStyle='#cafff6';c.fillRect(x+barW-6,g.backingY+14,3,g.backingH-28);arrangementHitRegions.push({type:'backing',x,y:g.backingY+7,width:barW,height:g.backingH-14});
   }else{c.fillStyle='#61726c';c.font='700 9px DM Sans';c.textAlign='left';c.textBaseline='middle';c.fillText('Upload a backsound above to add its audio track',g.left+12,g.backingY+g.backingH/2)}
+  c.fillStyle='#1f241b';c.fillRect(g.left,g.transposeY,g.timelineWidth,g.transposeH);c.strokeStyle='#544c2c';c.strokeRect(g.left+.5,g.transposeY+.5,g.timelineWidth-1,g.transposeH-1);
+  for(const cue of editorTransposes){
+    const x=g.xAt(cue.start),y=g.transposeY+3,barW=clamp(g.pps*.8,76,140),barH=g.transposeH-6,selected=cue.id===selectedTransposeId;
+    c.fillStyle=selected?'#ffcf52':'#7f692d';c.beginPath();c.roundRect(x,y,barW,barH,4);c.fill();c.strokeStyle=selected?'#fff':'#d9b955';c.lineWidth=selected?2:1;c.stroke();
+    c.font='800 9px DM Sans';c.textAlign='left';c.textBaseline='middle';c.fillStyle=selected?'#20251b':'#fff0b9';c.fillText('✦ TRANSPOSE',x+7,y+barH/2);
+    arrangementHitRegions.push({type:'transpose',cueId:cue.id,x,y,width:barW,height:barH});
+  }
   for(let laneIndex=0;laneIndex<all.length;laneIndex++){const pitch=RANGE_MAX-laneIndex,y=g.notesY+laneIndex*g.laneH;c.fillStyle=laneIndex%2?'#0e1917':'#111e1b';c.fillRect(g.left,y,g.timelineWidth,g.laneH);c.strokeStyle='rgba(255,255,255,.055)';c.beginPath();c.moveTo(g.left,y+.5);c.lineTo(g.left+g.timelineWidth,y+.5);c.stroke();c.fillStyle=noteColor(pitch);c.font='800 8px DM Sans';c.textAlign='right';c.textBaseline='middle';c.fillText(displayPitchName(pitch),g.gutter,y+g.laneH/2)}
   for(const note of editorNotes){
     const laneIndex=RANGE_MAX-note.pitch,y=g.notesY+laneIndex*g.laneH+2,x=g.xAt(note.start),noteW=Math.max(5,note.duration*g.pps),noteH=Math.max(5,g.laneH-4),selected=selectedNoteIds.has(note.id);c.fillStyle=noteColor(note.pitch);c.beginPath();c.roundRect(x,y,noteW,noteH,Math.min(4,noteH/2));c.fill();c.strokeStyle=selected?'#fff':noteOutline(note.pitch);c.lineWidth=selected?2.5:1;c.stroke();if(selected&&selectedNoteIds.size===1){c.fillStyle='#fff';c.fillRect(x-1,y+2,3,Math.max(2,noteH-4));c.fillRect(x+noteW-2,y+2,3,Math.max(2,noteH-4))}arrangementHitRegions.push({type:'note',noteId:note.id,x,y,width:noteW,height:noteH});
