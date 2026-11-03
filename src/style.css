@@ -88,17 +88,25 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
   .arrangement-controls .live-selection{min-width:90px}
 }
 
-/* Touch piano recording: a stage-sized landscape instrument even on iOS Safari,
-   where element fullscreen and screen.orientation.lock may be unavailable. */
+/* Mobile Record is an edge-to-edge instrument, never a scrolling panel.
+   Keep the piano filling the stage; Menu and Exit float over its top edge. */
+.mobile-record-options{display:contents}
+.mobile-record-menu-toggle,.mobile-record-exit{display:none}
 .mobile-record-tools{display:none}
 @media (pointer:coarse){
-  body.mobile-record-mode{overflow:hidden;overscroll-behavior:none}
-  body.mobile-record-mode #app{background:#0c1715}
+  html:has(body.mobile-record-mode),
+  body.mobile-record-mode{
+    overflow:hidden!important;overscroll-behavior:none!important;
+    width:100%;height:100%;touch-action:none
+  }
+  body.mobile-record-mode #app{overflow:hidden!important}
   body.mobile-record-mode .stage{
     position:fixed!important;inset:0!important;z-index:500!important;
-    width:100dvw!important;height:100dvh!important;min-height:0!important;
-    max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;
-    box-shadow:none!important;transform:none;display:flex!important;flex-direction:column!important;
+    display:flex!important;flex-direction:column!important;
+    width:100dvw!important;height:100dvh!important;min-width:0!important;min-height:0!important;
+    max-height:none!important;margin:0!important;padding:0!important;
+    border:0!important;border-radius:0!important;box-shadow:none!important;
+    overflow:hidden!important;transform:none!important;
     background:#101c19
   }
   body.mobile-record-mode .stage-top,
@@ -107,50 +115,103 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
   body.mobile-record-mode .hit-label,
   body.mobile-record-mode .stage-edit-hud,
   body.mobile-record-mode .record-map,
-  body.mobile-record-mode #stageCanvas{visibility:hidden!important;pointer-events:none!important}
+  body.mobile-record-mode #stageCanvas{display:none!important}
   body.mobile-record-mode .canvas-wrap{
-    flex:0 0 86px!important;height:86px!important;min-height:0!important;
-    background:#101c19;overflow:visible
+    position:absolute!important;inset:0!important;z-index:10!important;
+    width:100%!important;height:0!important;flex:0 0 0!important;min-height:0!important;
+    overflow:visible!important;background:transparent!important;pointer-events:none
   }
   body.mobile-record-mode .record-hud{
-    position:absolute;inset:8px 10px auto!important;top:8px!important;left:10px!important;
-    right:10px!important;display:flex!important;flex-wrap:nowrap!important;
-    align-items:center!important;gap:8px!important;min-height:62px!important;
-    padding:8px 11px!important;overflow:hidden
+    position:absolute!important;top:8px!important;left:8px!important;right:8px!important;bottom:auto!important;
+    display:flex!important;align-items:center!important;justify-content:space-between!important;
+    flex-wrap:nowrap!important;gap:9px!important;
+    width:auto!important;height:48px!important;min-height:0!important;
+    margin:0!important;padding:5px 8px!important;
+    background:rgba(12,22,20,.92)!important;
+    border:1px solid rgba(255,255,255,.25)!important;border-radius:11px!important;
+    overflow:visible!important;pointer-events:auto;
+    -webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px)
+  }
+  body.mobile-record-mode .record-hud[hidden]{display:none!important}
+  body.mobile-record-mode .record-hud>.record-pulse{order:2;flex:0 0 8px!important}
+  body.mobile-record-mode .record-hud>strong{
+    order:3;flex:1;min-width:0!important;
+    color:#f9f5e8;font-size:18px!important;text-align:left
+  }
+  body.mobile-record-mode .mobile-record-menu-toggle,
+  body.mobile-record-mode .mobile-record-exit{
+    display:inline-flex!important;align-items:center;justify-content:center;
+    flex:0 0 auto;height:36px!important;min-width:76px;
+    padding:0 12px;border-radius:6px;border:1px solid #66746c;
+    background:#22352e;color:#f4f5e6;font-size:11px;font-weight:900;
+    letter-spacing:.6px;white-space:nowrap;touch-action:manipulation
+  }
+  body.mobile-record-mode .mobile-record-menu-toggle{order:1}
+  body.mobile-record-mode .mobile-record-exit{
+    order:4;border-color:#e0ad60;background:#d3a451;color:#1d251f
+  }
+  body.mobile-record-mode .mobile-record-options{
+    position:absolute!important;top:calc(100% + 7px);left:0;
+    display:none!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:8px!important;width:min(325px,100%)!important;max-width:100%!important;
+    padding:11px!important;border:1px solid #6a8177;border-radius:10px;
+    background:rgba(13,28,24,.97);box-shadow:0 12px 34px #000b;
+    overflow:hidden!important;z-index:12
+  }
+  body.mobile-record-mode .record-hud.mobile-menu-open .mobile-record-options{
+    display:grid!important
+  }
+  body.mobile-record-mode .mobile-record-options .record-transport{
+    display:flex;align-items:center;justify-content:center;
+    height:42px!important;width:100%!important;
+    font-size:18px!important;touch-action:manipulation
+  }
+  body.mobile-record-mode .mobile-record-options #recordPlay::after{
+    content:" PLAY/PAUSE";font-size:9px;letter-spacing:.25px;margin-left:6px
+  }
+  body.mobile-record-mode .mobile-record-options #recordRestart::after{
+    content:" REWIND";font-size:9px;letter-spacing:.25px;margin-left:6px
   }
   body.mobile-record-mode .mobile-record-tools{
-    display:flex;flex:1;min-width:0;align-items:center;gap:8px
+    display:flex!important;grid-column:1/-1;align-items:center;gap:8px;
+    min-width:0;min-height:42px
   }
   body.mobile-record-mode .mobile-record-upload{
-    display:grid;place-items:center;flex:none;min-height:37px;padding:0 10px;
-    border:1px solid #5b9d8a;border-radius:5px;background:#1e4138;
-    color:#ccfbee;font-size:10px;font-weight:800;letter-spacing:.35px;cursor:pointer
+    display:flex;align-items:center;justify-content:center;flex:none;
+    height:40px;padding:0 9px;border:1px solid #5b9d8a;
+    border-radius:6px;background:#1e4138;color:#ccfbee;
+    font-size:10px;font-weight:800;cursor:pointer;touch-action:manipulation
   }
   body.mobile-record-mode .mobile-record-backing-name{
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:170px;
+    flex:1;min-width:0;max-width:none;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
     color:#c5dad1;font-size:10px
   }
-  body.mobile-record-mode .mobile-record-tip{
-    margin-left:auto;color:#f6c97a;font-size:9px;letter-spacing:1px;white-space:nowrap
+  body.mobile-record-mode .mobile-record-options .record-stop{
+    grid-column:1/-1;margin:0!important;min-height:39px!important;
+    width:100%!important;touch-action:manipulation
   }
-  body.mobile-record-mode .record-stop{margin-left:0!important;min-height:37px;font-size:10px}
-  body.mobile-record-mode .record-transport{width:39px;height:39px}
-  body.mobile-record-mode .record-hud>strong{font-size:19px;min-width:54px}
+  body.mobile-record-mode .mobile-record-options .record-stop::after{content:" & SAVE"}
   body.mobile-record-mode .keys{
-    flex:1 1 auto!important;height:auto!important;min-height:0!important;
-    margin:0 10px 8px;padding:0;border:1px solid #637167;border-radius:0 0 10px 10px;
-    overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+    flex:1 1 auto!important;display:flex!important;align-self:stretch;
+    width:100%!important;height:100%!important;min-height:0!important;
+    margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+    overflow:hidden!important;touch-action:none!important;overscroll-behavior:none;
+    user-select:none!important;-webkit-user-select:none!important;
     -webkit-touch-callout:none
   }
   body.mobile-record-mode .key{
-    height:100%!important;min-width:0;flex:1;align-items:flex-end;
-    padding-bottom:clamp(12px,4dvh,29px)!important;font-size:clamp(15px,3.2dvh,25px)!important;
-    touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer
+    flex:1 1 0!important;height:100%!important;min-width:0!important;
+    align-items:flex-end;justify-content:center;
+    padding-bottom:clamp(12px,4dvh,26px)!important;
+    font-size:clamp(15px,3dvh,24px)!important;
+    touch-action:none!important;user-select:none!important;
+    -webkit-user-select:none!important
   }
   body.mobile-record-mode .key.black{
-    height:59%!important;width:8.7%!important;flex:none;
-    font-size:clamp(12px,2.8dvh,20px)!important;
-    padding-bottom:clamp(8px,2dvh,18px)!important
+    flex:none!important;height:59%!important;width:8.7%!important;
+    font-size:clamp(11px,2.7dvh,18px)!important;
+    padding-bottom:clamp(7px,2dvh,15px)!important
   }
 }
 @media (pointer:coarse) and (orientation:portrait){
@@ -160,11 +221,7 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
     transform-origin:top left!important;transform:rotate(90deg)!important
   }
 }
-@media (pointer:coarse) and (max-height:430px) and (orientation:landscape){
-  body.mobile-record-mode .canvas-wrap{flex-basis:72px!important;height:72px!important}
-  body.mobile-record-mode .record-hud{min-height:54px!important;top:5px!important}
-}
-@media (pointer:coarse) and (max-width:700px) and (orientation:landscape){
-  body.mobile-record-mode .mobile-record-tip{display:none}
-  body.mobile-record-mode .mobile-record-backing-name{max-width:90px}
+@media (pointer:coarse) and (max-height:370px) and (orientation:landscape){
+  body.mobile-record-mode .record-hud{height:43px!important;top:5px!important}
+  body.mobile-record-mode .mobile-record-options{padding:8px!important;gap:5px!important}
 }
