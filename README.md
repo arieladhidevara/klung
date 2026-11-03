@@ -8,6 +8,7 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 - Transcribe audio locally with Spotify Basic Pitch, then fold every octave into one chromatic C1–B1 layout.
 - Record a melody from the computer keyboard against an optional backsound. Record mode opens paused: use Space or its transport buttons to play/pause or rewind, scroll to scrub notes and backsound together, and upload or replace the backsound without leaving Record mode. Recorded notes can be selected, copied, pasted, deleted, moved, or resized while recording is still open.
 - Notes remain directly editable on the performance stage after recording, importing, or leaving the full timeline editor.
+- Add **+ TRANSPOSE** cues in Edit mode at the current playhead, drag them along their own timeline lane, or type an exact start time. When a cue reaches the hit line, all 12 note keys light up and a large TRANSPOSE label appears. This is a visual cue only: it does not alter song pitches or produce sound. Cue positions are saved in Klung projects and appear in exported videos and on connected mobile players.
 - Open the arrangement popup to play, move, resize, multi-select, copy, paste, delete, undo, or redo notes. Right-click a multi-selection for Group/Ungroup; clicking or dragging one grouped note selects and moves the entire group.
 - Scroll up/down in the arrangement timeline to zoom; zoomed timelines use horizontal overflow for left/right navigation.
 - Add an audio or video backsound in Edit mode. Klung uses its audio only; drag its track to align it, resize its right edge to time-stretch it, or use the precise start/length controls.
@@ -17,7 +18,7 @@ Klung! turns a melody into a colorful C1–B1 falling-note performance for angkl
 - Start a synchronized mobile-player room from the laptop. Players scan a QR code, choose one or more notes, then see only their selected falling-note lanes, sized to fill the phone screen. Upcoming notes are dimmed; notes glow and read **Klung!** when they reach the hit line.
 - Switch the source piano/melody sound on or off in Edit mode without muting the backsound.
 - Change playback speed from 0.50×–2.00×; notes, source audio, backsound, recording transport, exports, and connected mobile timelines stay synchronized.
-- Use fixed solfège labels (Do, Re, Mi, Fa, Sol, and chromatic variants) across the stage, editor, exports, and connected phones.
+- Use fixed solfège labels (Do, Di, Re, Ri, Mi, Fa, Fis, Sol, Sis, La, Lis, Si) across the stage, editor, exports, and connected phones.
 - Use the fullscreen performance view for projection.
 
 ## Run locally
