@@ -44,6 +44,23 @@ let recording=false,recordingPlaying=false,recordPosition=0,recordStartedAt=0,re
 const pressedKeyboard=new Map();
 const touchPianoPointers=new Map();
 let mobileRecordingMode=false,mobileRecordOwnsFullscreen=false;
+// Keep the actual interactive keys and recording HUD, but port them outside #app.
+const mobileRecordScreen=$('#mobileRecordScreen');
+const mobilePiano=$('#piano'),mobileRecordHud=$('#recordHud');
+const mobilePianoHome={parent:mobilePiano.parentNode,next:mobilePiano.nextSibling};
+const mobileHudHome={parent:mobileRecordHud.parentNode,next:mobileRecordHud.nextSibling};
+function updateMobileRecordViewport(){
+  if(!mobileRecordingMode)return;
+  const viewport=window.visualViewport;
+  const width=viewport?.width||window.innerWidth,height=viewport?.height||window.innerHeight;
+  const left=viewport?.offsetLeft||0,top=viewport?.offsetTop||0;
+  for(const [key,value] of [['width',width],['height',height],['left',left],['top',top]])
+    mobileRecordScreen.style.setProperty(`--record-viewport-${key}`,`${Math.round(value*100)/100}px`);
+}
+window.addEventListener('resize',updateMobileRecordViewport);
+window.addEventListener('orientationchange',()=>requestAnimationFrame(updateMobileRecordViewport));
+window.visualViewport?.addEventListener('resize',updateMobileRecordViewport);
+window.visualViewport?.addEventListener('scroll',updateMobileRecordViewport);
 const nextNoteId=()=>`klung-note-${Date.now().toString(36)}-${(++noteSequence).toString(36)}`;
 const nextGroupId=()=>`klung-group-${Date.now().toString(36)}-${(++groupSequence).toString(36)}`;
 function ensureNoteIds(list=notes){for(const note of list)if(!note.id)note.id=nextNoteId();return list}
@@ -782,6 +799,9 @@ function setMobileRecordMenuOpen(open){
   button.setAttribute('aria-label',expanded?'Close recording controls':'Open recording controls');
 }
 $('#mobileRecordMenuToggle').onclick=()=>setMobileRecordMenuOpen(!$('#recordHud').classList.contains('mobile-menu-open'));
+mobileRecordScreen.addEventListener('pointerdown',event=>{
+  if(mobileRecordingMode&&!event.target.closest('.record-hud'))setMobileRecordMenuOpen(false);
+});
 $('#mobileRecordExit').onclick=()=>{if(recording)stopRecording()};
 function isPhoneRecordingViewport(){
   return window.matchMedia('(pointer:coarse)').matches&&Math.min(window.innerWidth,window.innerHeight)<=900;
@@ -789,8 +809,11 @@ function isPhoneRecordingViewport(){
 function enterMobileRecordMode(){
   mobileRecordingMode=isPhoneRecordingViewport();
   if(!mobileRecordingMode)return;
+  mobileRecordScreen.append(mobileRecordHud,mobilePiano);
+  mobileRecordScreen.hidden=false;
   document.body.classList.add('mobile-record-mode');
   document.body.classList.remove('performance-mode');
+  updateMobileRecordViewport();
   setMobileRecordMenuOpen(false);
   // Request while the Record tap still has user activation; Safari may reject it.
   try{
@@ -808,8 +831,12 @@ function enterMobileRecordMode(){
 }
 function leaveMobileRecordMode(){
   if(!mobileRecordingMode)return;
-  mobileRecordingMode=false;document.body.classList.remove('mobile-record-mode');
+  mobileRecordingMode=false;
   setMobileRecordMenuOpen(false);
+  document.body.classList.remove('mobile-record-mode');
+  mobileRecordScreen.hidden=true;
+  mobileHudHome.parent.insertBefore(mobileRecordHud,mobileHudHome.next);
+  mobilePianoHome.parent.insertBefore(mobilePiano,mobilePianoHome.next);
   touchPianoPointers.clear();
   try{screen.orientation?.unlock?.()}catch{}
   if(mobileRecordOwnsFullscreen&&document.fullscreenElement)void document.exitFullscreen?.().catch(()=>{});
@@ -835,7 +862,10 @@ function stopRecording(){
   clearSourceMedia();
   recalculateDuration();$('#songTitle').textContent='My Recording';$('#songSubtitle').textContent=backingUrl?backingName:'';recordingSnapshot=null;finishLoad(`Recording ready · ${notes.length} notes${backingUrl?' + backsound':''}.`);persistProject();
 }
-$('#record').onclick=()=>recording?stopRecording():startRecording();$('#stopRecord').onclick=stopRecording;$('#recordPlay').onclick=toggleRecordingPlayback;$('#recordRestart').onclick=rewindRecording;
+$('#record').onclick=()=>recording?stopRecording():startRecording();
+$('#stopRecord').onclick=stopRecording;
+$('#recordPlay').onclick=()=>{if(mobileRecordingMode)setMobileRecordMenuOpen(false);void toggleRecordingPlayback()};
+$('#recordRestart').onclick=()=>{if(mobileRecordingMode)setMobileRecordMenuOpen(false);void rewindRecording()};
 window.addEventListener('blur',()=>{if(recording)finishAllKeyboardNotes()});
 document.addEventListener('visibilitychange',()=>{if(recording&&document.hidden)finishAllKeyboardNotes()});
 window.addEventListener('beforeunload',event=>{if(editorDirty||recording){event.preventDefault();event.returnValue=''}});
@@ -847,7 +877,7 @@ $('#backingFile').addEventListener('change',async event=>{await loadBackingFile(
 $('#recordBackingFile').addEventListener('click',()=>{if(recordingPlaying)toggleRecordingPlayback()});
 $('#recordBackingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value=''});
 $('#mobileRecordBackingFile').addEventListener('click',()=>{if(recordingPlaying)void toggleRecordingPlayback()});
-$('#mobileRecordBackingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value=''});
+$('#mobileRecordBackingFile').addEventListener('change',async event=>{await loadBackingFile(event.target.files?.[0]);event.target.value='';setMobileRecordMenuOpen(false)});
 function shiftBacking(seconds){if(!backingUrl)return;backingOffset=roundTime(Math.max(-Math.max(0,backingTimelineDuration()-.05),backingOffset+seconds));updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing);persistProject();$('#info').textContent=`Backsound starts at ${backingOffset.toFixed(2)}s.`}
 $('#backingNudgeBack').onclick=()=>shiftBacking(-.1);$('#backingNudgeForward').onclick=()=>shiftBacking(.1);
 $('#backingOffset').addEventListener('change',event=>{backingOffset=roundTime(Number(event.target.value)||0);updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing);persistProject();$('#info').textContent=`Backsound starts at ${backingOffset.toFixed(2)}s.`});
