@@ -87,3 +87,84 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
   .arrangement-controls{flex-wrap:wrap;gap:6px;padding-top:8px;padding-bottom:8px}
   .arrangement-controls .live-selection{min-width:90px}
 }
+
+/* Touch piano recording: a stage-sized landscape instrument even on iOS Safari,
+   where element fullscreen and screen.orientation.lock may be unavailable. */
+.mobile-record-tools{display:none}
+@media (pointer:coarse){
+  body.mobile-record-mode{overflow:hidden;overscroll-behavior:none}
+  body.mobile-record-mode #app{background:#0c1715}
+  body.mobile-record-mode .stage{
+    position:fixed!important;inset:0!important;z-index:500!important;
+    width:100dvw!important;height:100dvh!important;min-height:0!important;
+    max-height:none!important;margin:0!important;border:0!important;border-radius:0!important;
+    box-shadow:none!important;transform:none;display:flex!important;flex-direction:column!important;
+    background:#101c19
+  }
+  body.mobile-record-mode .stage-top,
+  body.mobile-record-mode .stage-bottom,
+  body.mobile-record-mode .stage-watermark,
+  body.mobile-record-mode .hit-label,
+  body.mobile-record-mode .stage-edit-hud,
+  body.mobile-record-mode .record-map,
+  body.mobile-record-mode #stageCanvas{visibility:hidden!important;pointer-events:none!important}
+  body.mobile-record-mode .canvas-wrap{
+    flex:0 0 86px!important;height:86px!important;min-height:0!important;
+    background:#101c19;overflow:visible
+  }
+  body.mobile-record-mode .record-hud{
+    position:absolute;inset:8px 10px auto!important;top:8px!important;left:10px!important;
+    right:10px!important;display:flex!important;flex-wrap:nowrap!important;
+    align-items:center!important;gap:8px!important;min-height:62px!important;
+    padding:8px 11px!important;overflow:hidden
+  }
+  body.mobile-record-mode .mobile-record-tools{
+    display:flex;flex:1;min-width:0;align-items:center;gap:8px
+  }
+  body.mobile-record-mode .mobile-record-upload{
+    display:grid;place-items:center;flex:none;min-height:37px;padding:0 10px;
+    border:1px solid #5b9d8a;border-radius:5px;background:#1e4138;
+    color:#ccfbee;font-size:10px;font-weight:800;letter-spacing:.35px;cursor:pointer
+  }
+  body.mobile-record-mode .mobile-record-backing-name{
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:170px;
+    color:#c5dad1;font-size:10px
+  }
+  body.mobile-record-mode .mobile-record-tip{
+    margin-left:auto;color:#f6c97a;font-size:9px;letter-spacing:1px;white-space:nowrap
+  }
+  body.mobile-record-mode .record-stop{margin-left:0!important;min-height:37px;font-size:10px}
+  body.mobile-record-mode .record-transport{width:39px;height:39px}
+  body.mobile-record-mode .record-hud>strong{font-size:19px;min-width:54px}
+  body.mobile-record-mode .keys{
+    flex:1 1 auto!important;height:auto!important;min-height:0!important;
+    margin:0 10px 8px;padding:0;border:1px solid #637167;border-radius:0 0 10px 10px;
+    overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;
+    -webkit-touch-callout:none
+  }
+  body.mobile-record-mode .key{
+    height:100%!important;min-width:0;flex:1;align-items:flex-end;
+    padding-bottom:clamp(12px,4dvh,29px)!important;font-size:clamp(15px,3.2dvh,25px)!important;
+    touch-action:none;user-select:none;-webkit-user-select:none;cursor:pointer
+  }
+  body.mobile-record-mode .key.black{
+    height:59%!important;width:8.7%!important;flex:none;
+    font-size:clamp(12px,2.8dvh,20px)!important;
+    padding-bottom:clamp(8px,2dvh,18px)!important
+  }
+}
+@media (pointer:coarse) and (orientation:portrait){
+  body.mobile-record-mode .stage{
+    inset:auto!important;top:0!important;left:100dvw!important;right:auto!important;bottom:auto!important;
+    width:100dvh!important;height:100dvw!important;
+    transform-origin:top left!important;transform:rotate(90deg)!important
+  }
+}
+@media (pointer:coarse) and (max-height:430px) and (orientation:landscape){
+  body.mobile-record-mode .canvas-wrap{flex-basis:72px!important;height:72px!important}
+  body.mobile-record-mode .record-hud{min-height:54px!important;top:5px!important}
+}
+@media (pointer:coarse) and (max-width:700px) and (orientation:landscape){
+  body.mobile-record-mode .mobile-record-tip{display:none}
+  body.mobile-record-mode .mobile-record-backing-name{max-width:90px}
+}

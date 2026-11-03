@@ -41,7 +41,15 @@
           <strong id="recordTime">00:00</strong>
           <button id="recordPlay" class="record-transport record-play" type="button" aria-label="Play recording timeline">▶</button>
           <button id="recordRestart" class="record-transport" type="button" aria-label="Rewind recording timeline">↺</button>
-          <div class="record-map" aria-label="Computer keyboard note map">
+          <div class="mobile-record-tools" aria-label="Mobile recording options">
+              <label class="mobile-record-upload" title="Choose audio or video backing music">
+                <input id="mobileRecordBackingFile" type="file" accept="audio/*,video/*,.mp3,.wav,.ogg,.m4a,.mp4,.aac,.webm,.mov" hidden />
+                ♫ BACKSOUND
+              </label>
+              <span id="mobileRecordBackingName" class="mobile-record-backing-name">NO BACKSOUND</span>
+              <span class="mobile-record-tip">TAP KEYS TO RECORD</span>
+            </div>
+            <div class="record-map" aria-label="Computer keyboard note map">
             <span><b>WHITE</b><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd></span>
             <span><b>BLACK</b><kbd>W</kbd><kbd>E</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd></span>
           </div>
@@ -93,7 +101,7 @@
             <div class="arrangement-timeline-wrap">
               <canvas id="arrangementCanvas" aria-label="Backsound, transpose cues and note alignment timeline"></canvas>
             </div>
-            <footer class="arrangement-footer"><span>Scroll up/down to zoom. Use the horizontal overflow to move left/right.</span><div><b id="arrangementZoomLabel">100%</b><b id="arrangementClock">00:00 / 00:00</b></div></footer>
+            <footer class="arrangement-footer"><span>Scroll to zoom, or pinch with two fingers on touchscreens. Drag sideways to navigate.</span><div><b id="arrangementZoomLabel">100%</b><b id="arrangementClock">00:00 / 00:00</b></div></footer>
           </div>
         </div>
         <div class="note-context-menu" id="noteContextMenu" hidden role="menu" aria-label="Selected note actions">
