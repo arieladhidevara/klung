@@ -110,6 +110,20 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     for(const note of snapshot.notes){
       if(!mobileSelection.has(note.pitch))continue;const delta=note.start-timeline,duration=Math.max(.08,Number(note.duration)||.08);if(delta>lookAhead||delta<-duration-.18)continue;const lane=laneByPitch.get(note.pitch),gap=Math.min(12,Math.max(3,laneWidth*.035)),x=lane*laneWidth+gap,headY=hitY-delta/lookAhead*travel,noteHeight=Math.max(18,duration/lookAhead*travel),noteWidth=Math.max(12,laneWidth-gap*2),y=headY-noteHeight,color=noteColors[((note.pitch%12)+12)%12],active=delta<=.035&&delta>=-duration;if(active)activePitches.add(note.pitch);if(delta<=.045&&delta>=-.16)hitEffects.push({x:x+noteWidth/2,color,strength:1-Math.min(1,Math.abs(delta)/.16)});c.save();c.globalAlpha=active?1:delta>0?.48:.18;c.fillStyle=color;if(active){c.shadowColor=color;c.shadowBlur=34}c.beginPath();c.roundRect(x,y,noteWidth,noteHeight,Math.min(10,noteHeight/2));c.fill();c.shadowBlur=0;c.strokeStyle=active?'#fff':'rgba(255,255,255,.7)';c.lineWidth=active?4:1.5;c.stroke();if(noteWidth>=36&&noteHeight>=18){const label=active?'Klung!':displayedName(note.pitch),fontSize=Math.max(11,Math.min(active?30:25,noteWidth/(active?6:3.8))),labelY=active?Math.max(y+10,Math.min(headY-10,hitY-16)):Math.max(y+10,headY-11);c.fillStyle=noteInk(note.pitch);c.font=`900 ${fontSize}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(label,x+noteWidth/2,labelY)}c.restore();
     }
+    // Transpose is a visual all-player cue; it does not generate piano notes.
+    const transposeCues=Array.isArray(snapshot.transposes)?snapshot.transposes:[];
+    let transposeActive=false;
+    for(const cue of transposeCues){
+      const delta=Number(cue.start)-timeline,seconds=.9;
+      if(!Number.isFinite(delta)||delta>lookAhead||delta<-seconds)continue;
+      const cueHead=hitY-delta/lookAhead*travel,cueHeight=Math.max(35,seconds/lookAhead*travel),cueTop=cueHead-cueHeight,active=delta<=.05&&delta>=-seconds;
+      transposeActive ||= active;
+      c.save();c.beginPath();c.rect(0,top,width,Math.max(0,hitY-top+30));c.clip();
+      c.globalAlpha=active?.96:delta>0?.62:.32;
+      c.fillStyle='rgba(255,207,82,.36)';c.fillRect(0,cueTop,width,cueHeight);c.strokeStyle='#ffcf52';c.lineWidth=3;c.strokeRect(1,cueTop,width-2,cueHeight);
+      c.shadowColor='#ffcf52';c.shadowBlur=active?30:8;c.font=`900 ${Math.max(16,Math.min(28,width/15))}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#fff2b9';c.fillText('TRANSPOSE',width/2,(cueTop+cueHead)/2);c.restore();
+    }
+    if(transposeActive)for(const pitch of selectedPitches)activePitches.add(pitch);
     c.shadowColor='#ffcf52';c.shadowBlur=10;c.fillStyle='#ffcf52';c.fillRect(0,hitY,width,3);c.shadowBlur=0;
     for(const effect of hitEffects){const radius=24+25*effect.strength,glow=c.createRadialGradient(effect.x,hitY,0,effect.x,hitY,radius);glow.addColorStop(0,`${effect.color}f2`);glow.addColorStop(.28,`${effect.color}8c`);glow.addColorStop(1,`${effect.color}00`);c.save();c.globalAlpha=.4+.6*effect.strength;c.fillStyle=glow;c.beginPath();c.arc(effect.x,hitY,radius,0,Math.PI*2);c.fill();c.strokeStyle='#fff';c.lineWidth=2+3*effect.strength;c.beginPath();c.arc(effect.x,hitY,7+13*(1-effect.strength),0,Math.PI*2);c.stroke();c.restore()}
     c.textAlign='center';c.textBaseline='top';for(let lane=0;lane<selectedPitches.length;lane++){const pitch=selectedPitches[lane],active=activePitches.has(pitch),label=active?'Klung!':displayedName(pitch);c.save();c.fillStyle=active?'#fff':noteColors[((pitch%12)+12)%12];c.font=`900 ${Math.max(11,Math.min(active?20:22,laneWidth/(active?5.5:4)))}px sans-serif`;if(active){c.shadowColor=noteColors[((pitch%12)+12)%12];c.shadowBlur=20}c.fillText(label,lane*laneWidth+laneWidth/2,hitY+12);c.restore()}
@@ -120,7 +134,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     mobileFrame=requestAnimationFrame(renderMobileCue);if(ms-mobileLastFrame<1000/70||!snapshot||$('#mobileCue').hidden)return;mobileLastFrame=ms;const cue=$('#mobileCue');
     if(!mobileTransport.playing){renderMobileTimeline(mobileTransport.position);cue.classList.remove('playing','active');cue.style.background='#0d1715';$('#mobileCueStatus').textContent=mobileTransport.status.toUpperCase();return}
     const masterNow=Date.now()+clockOffset;if(masterNow<mobileTransport.executeAt){renderMobileTimeline(mobileTransport.position);cue.classList.remove('active');cue.style.background='#0d1715';$('#mobileCueStatus').textContent='GET READY';return}
-    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000*mobileTransport.playbackRate,active=renderMobileTimeline(timeline);cue.classList.add('playing');cue.classList.toggle('active',active);cue.style.background='#0d1715';$('#mobileCueStatus').textContent='PLAYING';
+    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000*mobileTransport.playbackRate,active=renderMobileTimeline(timeline);cue.classList.add('playing');cue.classList.toggle('active',active);cue.style.background='#0d1715';$('#mobileCueStatus').textContent=(snapshot?.transposes||[]).some(item=>timeline>=Number(item.start)&&timeline<Number(item.start)+.9)?'TRANSPOSE':'PLAYING';
     if(timeline>(snapshot.duration||0)+.5){mobileTransport.playing=false;mobileTransport.status='Finished';setMobileStatus('FINISHED')}
   }
 
