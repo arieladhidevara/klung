@@ -88,140 +88,146 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
   .arrangement-controls .live-selection{min-width:90px}
 }
 
-/* Mobile Record is an edge-to-edge instrument, never a scrolling panel.
-   Keep the piano filling the stage; Menu and Exit float over its top edge. */
-.mobile-record-options{display:contents}
+/* True phone recording overlay. The piano/HUD are portaled under <body>,
+   not rotated inside the normal stage; this avoids clipping and page bleed. */
+.mobile-record-screen[hidden]{display:none!important}
+.mobile-record-screen{display:none}
 .mobile-record-menu-toggle,.mobile-record-exit{display:none}
+.mobile-record-options{display:contents}
 .mobile-record-tools{display:none}
-@media (pointer:coarse){
-  html:has(body.mobile-record-mode),
-  body.mobile-record-mode{
-    overflow:hidden!important;overscroll-behavior:none!important;
-    width:100%;height:100%;touch-action:none
-  }
-  body.mobile-record-mode #app{overflow:hidden!important}
-  body.mobile-record-mode .stage{
-    position:fixed!important;inset:0!important;z-index:500!important;
-    display:flex!important;flex-direction:column!important;
-    width:100dvw!important;height:100dvh!important;min-width:0!important;min-height:0!important;
-    max-height:none!important;margin:0!important;padding:0!important;
-    border:0!important;border-radius:0!important;box-shadow:none!important;
-    overflow:hidden!important;transform:none!important;
-    background:#101c19
-  }
-  body.mobile-record-mode .stage-top,
-  body.mobile-record-mode .stage-bottom,
-  body.mobile-record-mode .stage-watermark,
-  body.mobile-record-mode .hit-label,
-  body.mobile-record-mode .stage-edit-hud,
-  body.mobile-record-mode .record-map,
-  body.mobile-record-mode #stageCanvas{display:none!important}
-  body.mobile-record-mode .canvas-wrap{
-    position:absolute!important;inset:0!important;z-index:10!important;
-    width:100%!important;height:0!important;flex:0 0 0!important;min-height:0!important;
-    overflow:visible!important;background:transparent!important;pointer-events:none
-  }
-  body.mobile-record-mode .record-hud{
-    position:absolute!important;top:8px!important;left:8px!important;right:8px!important;bottom:auto!important;
-    display:flex!important;align-items:center!important;justify-content:space-between!important;
-    flex-wrap:nowrap!important;gap:9px!important;
-    width:auto!important;height:48px!important;min-height:0!important;
-    margin:0!important;padding:5px 8px!important;
-    background:rgba(12,22,20,.92)!important;
-    border:1px solid rgba(255,255,255,.25)!important;border-radius:11px!important;
-    overflow:visible!important;pointer-events:auto;
-    -webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px)
-  }
-  body.mobile-record-mode .record-hud[hidden]{display:none!important}
-  body.mobile-record-mode .record-hud>.record-pulse{order:2;flex:0 0 8px!important}
-  body.mobile-record-mode .record-hud>strong{
-    order:3;flex:1;min-width:0!important;
-    color:#f9f5e8;font-size:18px!important;text-align:left
-  }
-  body.mobile-record-mode .mobile-record-menu-toggle,
-  body.mobile-record-mode .mobile-record-exit{
-    display:inline-flex!important;align-items:center;justify-content:center;
-    flex:0 0 auto;height:36px!important;min-width:76px;
-    padding:0 12px;border-radius:6px;border:1px solid #66746c;
-    background:#22352e;color:#f4f5e6;font-size:11px;font-weight:900;
-    letter-spacing:.6px;white-space:nowrap;touch-action:manipulation
-  }
-  body.mobile-record-mode .mobile-record-menu-toggle{order:1}
-  body.mobile-record-mode .mobile-record-exit{
-    order:4;border-color:#e0ad60;background:#d3a451;color:#1d251f
-  }
-  body.mobile-record-mode .mobile-record-options{
-    position:absolute!important;top:calc(100% + 7px);left:0;
-    display:none!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-    gap:8px!important;width:min(325px,100%)!important;max-width:100%!important;
-    padding:11px!important;border:1px solid #6a8177;border-radius:10px;
-    background:rgba(13,28,24,.97);box-shadow:0 12px 34px #000b;
-    overflow:hidden!important;z-index:12
-  }
-  body.mobile-record-mode .record-hud.mobile-menu-open .mobile-record-options{
-    display:grid!important
-  }
-  body.mobile-record-mode .mobile-record-options .record-transport{
-    display:flex;align-items:center;justify-content:center;
-    height:42px!important;width:100%!important;
-    font-size:18px!important;touch-action:manipulation
-  }
-  body.mobile-record-mode .mobile-record-options #recordPlay::after{
-    content:" PLAY/PAUSE";font-size:9px;letter-spacing:.25px;margin-left:6px
-  }
-  body.mobile-record-mode .mobile-record-options #recordRestart::after{
-    content:" REWIND";font-size:9px;letter-spacing:.25px;margin-left:6px
-  }
-  body.mobile-record-mode .mobile-record-tools{
-    display:flex!important;grid-column:1/-1;align-items:center;gap:8px;
-    min-width:0;min-height:42px
-  }
-  body.mobile-record-mode .mobile-record-upload{
-    display:flex;align-items:center;justify-content:center;flex:none;
-    height:40px;padding:0 9px;border:1px solid #5b9d8a;
-    border-radius:6px;background:#1e4138;color:#ccfbee;
-    font-size:10px;font-weight:800;cursor:pointer;touch-action:manipulation
-  }
-  body.mobile-record-mode .mobile-record-backing-name{
-    flex:1;min-width:0;max-width:none;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    color:#c5dad1;font-size:10px
-  }
-  body.mobile-record-mode .mobile-record-options .record-stop{
-    grid-column:1/-1;margin:0!important;min-height:39px!important;
-    width:100%!important;touch-action:manipulation
-  }
-  body.mobile-record-mode .mobile-record-options .record-stop::after{content:" & SAVE"}
-  body.mobile-record-mode .keys{
-    flex:1 1 auto!important;display:flex!important;align-self:stretch;
-    width:100%!important;height:100%!important;min-height:0!important;
-    margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
-    overflow:hidden!important;touch-action:none!important;overscroll-behavior:none;
-    user-select:none!important;-webkit-user-select:none!important;
-    -webkit-touch-callout:none
-  }
-  body.mobile-record-mode .key{
-    flex:1 1 0!important;height:100%!important;min-width:0!important;
-    align-items:flex-end;justify-content:center;
-    padding-bottom:clamp(12px,4dvh,26px)!important;
-    font-size:clamp(15px,3dvh,24px)!important;
-    touch-action:none!important;user-select:none!important;
-    -webkit-user-select:none!important
-  }
-  body.mobile-record-mode .key.black{
-    flex:none!important;height:59%!important;width:8.7%!important;
-    font-size:clamp(11px,2.7dvh,18px)!important;
-    padding-bottom:clamp(7px,2dvh,15px)!important
-  }
+body.mobile-record-mode{
+  overflow:hidden!important;overscroll-behavior:none!important;
+  touch-action:none;-webkit-overflow-scrolling:auto
+}
+body.mobile-record-mode #app{visibility:hidden!important}
+body.mobile-record-mode .mobile-record-screen{
+  position:fixed!important;z-index:99999!important;
+  top:var(--record-viewport-top,0px)!important;
+  left:var(--record-viewport-left,0px)!important;
+  width:var(--record-viewport-width,100dvw)!important;
+  height:var(--record-viewport-height,100dvh)!important;
+  min-width:0!important;min-height:0!important;max-width:none!important;
+  margin:0!important;padding:0!important;border:0!important;
+  border-radius:0!important;box-shadow:none!important;
+  display:flex!important;flex-direction:column!important;isolation:isolate;
+  overflow:hidden!important;overscroll-behavior:none!important;
+  touch-action:none!important;user-select:none;-webkit-user-select:none;
+  background:#101c19;color:#eef5ee
+}
+body.mobile-record-mode .mobile-record-screen .record-hud[hidden]{display:none!important}
+body.mobile-record-mode .mobile-record-screen .record-hud{
+  position:absolute!important;z-index:10!important;
+  top:calc(7px + env(safe-area-inset-top,0px))!important;
+  left:calc(8px + env(safe-area-inset-left,0px))!important;
+  right:calc(8px + env(safe-area-inset-right,0px))!important;
+  bottom:auto!important;width:auto!important;height:46px!important;min-height:0!important;
+  padding:5px 9px!important;margin:0!important;
+  display:flex!important;flex-wrap:nowrap!important;align-items:center!important;
+  gap:9px!important;justify-content:flex-start!important;
+  border:1px solid rgba(225,241,228,.3)!important;border-radius:9px!important;
+  background:rgba(12,25,21,.92)!important;box-shadow:0 8px 28px #0009!important;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  overflow:visible!important;pointer-events:auto
+}
+body.mobile-record-mode .mobile-record-screen .record-pulse{order:2;flex:0 0 9px!important}
+body.mobile-record-mode .mobile-record-screen .record-hud>strong{
+  order:3;min-width:0!important;flex:1;color:#fff9e6;font-size:18px!important;
+  font-variant-numeric:tabular-nums
+}
+body.mobile-record-mode .mobile-record-screen .mobile-record-menu-toggle{
+  display:flex!important;order:1;align-items:center;justify-content:center;
+  flex:0 0 auto;min-width:86px;height:36px!important;padding:0 11px;
+  border:1px solid #718a7a;border-radius:6px;background:#294337;
+  color:#f1fff2;font-size:11px;font-weight:900;letter-spacing:.55px;
+  touch-action:manipulation;cursor:pointer
+}
+body.mobile-record-mode .mobile-record-screen .record-hud.mobile-menu-open .mobile-record-menu-toggle{
+  background:#f2ce77;color:#22312b;border-color:#f2ce77
+}
+body.mobile-record-mode .mobile-record-screen .record-map{display:none!important}
+body.mobile-record-mode .mobile-record-screen .mobile-record-options{
+  position:absolute!important;top:calc(100% + 6px)!important;left:0!important;
+  right:auto!important;z-index:30!important;
+  display:none!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+  width:min(335px,100%)!important;min-width:0!important;
+  margin:0!important;padding:10px!important;gap:7px!important;
+  border:1px solid #688476;border-radius:10px;
+  background:rgba(14,28,23,.98);box-shadow:0 14px 38px #000b;
+  max-height:calc(var(--record-viewport-width,360px) - 68px);
+  overflow-y:auto!important;overscroll-behavior:contain;
+  touch-action:pan-y
+}
+body.mobile-record-mode .mobile-record-screen .record-hud.mobile-menu-open .mobile-record-options{
+  display:grid!important
+}
+body.mobile-record-mode .mobile-record-screen .record-transport{
+  display:flex;align-items:center;justify-content:center;
+  width:100%!important;height:40px!important;min-width:0;
+  padding:0 5px!important;font-size:17px!important;touch-action:manipulation
+}
+body.mobile-record-mode .mobile-record-screen #recordPlay::after{
+  content:" PLAY / PAUSE";margin-left:7px;font-size:9px;letter-spacing:0
+}
+body.mobile-record-mode .mobile-record-screen #recordRestart::after{
+  content:" REWIND";margin-left:7px;font-size:9px;letter-spacing:0
+}
+body.mobile-record-mode .mobile-record-screen .mobile-record-tools{
+  grid-column:1/-1;display:flex!important;align-items:center;gap:8px;
+  min-width:0;min-height:41px
+}
+body.mobile-record-mode .mobile-record-screen .mobile-record-upload{
+  display:flex;align-items:center;justify-content:center;
+  height:39px!important;flex:none;padding:0 10px;
+  border:1px solid #61a78e;border-radius:6px;
+  background:#204a3c;color:#d2fff1;font-size:10px;font-weight:800;
+  touch-action:manipulation;cursor:pointer
+}
+body.mobile-record-mode .mobile-record-screen .mobile-record-backing-name{
+  flex:1;min-width:0;max-width:none!important;overflow:hidden;
+  white-space:nowrap;text-overflow:ellipsis;color:#cbdad1;font-size:10px
+}
+body.mobile-record-mode .mobile-record-screen #stopRecord{display:none!important}
+body.mobile-record-mode .mobile-record-screen .mobile-record-exit{
+  grid-column:1/-1;display:flex!important;align-items:center;justify-content:center;
+  width:100%!important;height:42px!important;margin:0!important;
+  border:1px solid #efbd6c!important;border-radius:6px!important;
+  background:#e4b869!important;color:#202a24!important;
+  font-size:12px;font-weight:900;letter-spacing:.55px;
+  touch-action:manipulation;cursor:pointer
+}
+body.mobile-record-mode .mobile-record-screen .keys{
+  position:relative;flex:1 1 auto!important;align-self:stretch!important;
+  display:flex!important;width:100%!important;height:100%!important;min-height:0!important;
+  margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+  overflow:hidden!important;touch-action:none!important;overscroll-behavior:none!important;
+  user-select:none!important;-webkit-user-select:none!important;
+  -webkit-touch-callout:none
+}
+body.mobile-record-mode .mobile-record-screen .key{
+  flex:1 1 0!important;min-width:0!important;height:100%!important;
+  align-items:flex-end!important;justify-content:center!important;
+  padding-bottom:clamp(10px,4dvh,28px)!important;
+  font-size:clamp(15px,3dvh,25px)!important;line-height:1;
+  touch-action:none!important;user-select:none!important;
+  -webkit-user-select:none!important
+}
+body.mobile-record-mode .mobile-record-screen .key.black{
+  flex:none!important;height:59%!important;width:8.7%!important;
+  font-size:clamp(11px,2.7dvh,19px)!important;
+  padding-bottom:clamp(7px,2dvh,16px)!important
 }
 @media (pointer:coarse) and (orientation:portrait){
-  body.mobile-record-mode .stage{
-    inset:auto!important;top:0!important;left:100dvw!important;right:auto!important;bottom:auto!important;
-    width:100dvh!important;height:100dvw!important;
+  body.mobile-record-mode .mobile-record-screen{
+    top:var(--record-viewport-top,0px)!important;
+    left:calc(var(--record-viewport-left,0px) + var(--record-viewport-width,100dvw))!important;
+    width:var(--record-viewport-height,100dvh)!important;
+    height:var(--record-viewport-width,100dvw)!important;
     transform-origin:top left!important;transform:rotate(90deg)!important
   }
+  body.mobile-record-mode .mobile-record-screen .record-hud{
+    top:7px!important;left:8px!important;right:8px!important
+  }
 }
-@media (pointer:coarse) and (max-height:370px) and (orientation:landscape){
-  body.mobile-record-mode .record-hud{height:43px!important;top:5px!important}
-  body.mobile-record-mode .mobile-record-options{padding:8px!important;gap:5px!important}
+@media (pointer:coarse) and (orientation:landscape){
+  body.mobile-record-mode .mobile-record-screen{transform:none!important}
 }
