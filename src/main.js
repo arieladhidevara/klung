@@ -320,6 +320,31 @@ const editorRoot=$('#liveEditor'),arrangementCanvas=$('#arrangementCanvas'),arra
 let editorNotes=[],editorTransposes=[],selectedTransposeId=null,selectedNoteIds=new Set(),editorDirty=false,editorDrag=null,noteHitRegions=[],noteClipboard=null,arrangementDrag=null,arrangementHitRegions=[];
 let stageQuickEdit=false,arrangementZoom=1,arrangementViewportWidth=0;
 let editorHistory=[],editorHistoryIndex=-1,editorInitialSignature='';
+// Track two independent touch pointers so pinch-zoom doesn't edit notes accidentally.
+const arrangementTouchPointers=new Map();
+let arrangementPinch=null,arrangementPinchGesture=false;
+function arrangementPinchCoordinates(){
+  const [a,b]=[...arrangementTouchPointers.values()];
+  if(!a||!b)return null;
+  return {centerX:(a.x+b.x)/2,distance:Math.max(8,Math.hypot(a.x-b.x,a.y-b.y))};
+}
+function startArrangementPinch(){
+  if(arrangementPinchGesture)return;
+  // Cancel the first finger's pending note/backing edit when a second finger arrives.
+  if(arrangementDrag){
+    if(arrangementDrag.type==='backing'){backingOffset=arrangementDrag.originalOffset;updateBackingControls();recalculateDuration();syncTimelineMedia(time,playing)}
+    else if(arrangementDrag.type==='backing-resize')setBackingTimelineLength(arrangementDrag.originalLength);
+    else if(editorHistoryIndex>=0&&['note','note-resize-left','note-resize-right','transpose'].includes(arrangementDrag.type))
+      restoreEditorState(editorHistory[editorHistoryIndex]);
+    arrangementDrag=null;
+  }
+  arrangementPinchGesture=true;
+  const coordinates=arrangementPinchCoordinates();
+  if(coordinates)arrangementPinch={initialDistance:coordinates.distance,initialZoom:arrangementZoom,lastCenterX:coordinates.centerX};
+}
+function resetArrangementTouches(){
+  arrangementTouchPointers.clear();arrangementPinch=null;arrangementPinchGesture=false;
+}
 for(let pitch=RANGE_MIN;pitch<=RANGE_MAX;pitch++){
   const option=document.createElement('option');option.value=String(pitch);option.textContent=displayPitchName(pitch);$('#editorPitch').append(option);
 }
@@ -462,12 +487,12 @@ function selectEditorNote(id,additive=false){
   updateEditorInspector();
 }
 function openEditor(){
-  if(!notes.length)return;const carriedSelection=new Set(selectedNoteIds);disableStageQuickEdit();editorNotes=notes.map(note=>({...note,id:note.id||nextNoteId()}));editorTransposes=transposes.map(cue=>({...cue}));selectedTransposeId=null;selectedNoteIds=new Set([...carriedSelection].filter(id=>editorNotes.some(note=>note.id===id)));editorDirty=false;editorDrag=null;arrangementDrag=null;arrangementZoom=1;arrangementViewportWidth=0;arrangementCanvas.style.width='100%';arrangementScroller.scrollLeft=0;editorRoot.hidden=false;document.body.classList.add('editor-open');$('#stage').classList.add('live-editing');$('#editNotes').classList.add('active');$('#editNotes').lastChild.textContent=' EDITING';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=true;resetEditorHistory();updateBackingControls();updateEditorInspector();syncPlayButtons();requestAnimationFrame(renderArrangement);
+  if(!notes.length)return;const carriedSelection=new Set(selectedNoteIds);disableStageQuickEdit();editorNotes=notes.map(note=>({...note,id:note.id||nextNoteId()}));editorTransposes=transposes.map(cue=>({...cue}));selectedTransposeId=null;selectedNoteIds=new Set([...carriedSelection].filter(id=>editorNotes.some(note=>note.id===id)));editorDirty=false;editorDrag=null;arrangementDrag=null;arrangementZoom=1;arrangementViewportWidth=0;resetArrangementTouches();arrangementCanvas.style.width='100%';arrangementScroller.scrollLeft=0;editorRoot.hidden=false;document.body.classList.add('editor-open');$('#stage').classList.add('live-editing');$('#editNotes').classList.add('active');$('#editNotes').lastChild.textContent=' EDITING';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=true;resetEditorHistory();updateBackingControls();updateEditorInspector();syncPlayButtons();requestAnimationFrame(renderArrangement);
 }
 function closeEditor(force=false){
   if(!force&&editorDirty&&!window.confirm('Discard your unsaved note edits?'))return;
   const discarded=editorDirty;if(discarded){q.clear();for(const note of notes)if(note.start<=time+.06)q.add(note.id)}editorDirty=false;
-  editorRoot.hidden=true;hideNoteContextMenu();document.body.classList.remove('editor-open');$('#stage').classList.remove('live-editing');$('#editNotes').classList.remove('active');$('#editNotes').lastChild.textContent=' EDIT';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=!notes.length;selectedNoteIds.clear();editorDrag=null;arrangementDrag=null;noteHitRegions=[];arrangementHitRegions=[];editorHistory=[];editorHistoryIndex=-1;selectedTransposeId=null;editorTransposes=[];updateEditorHistoryControls();recalculateDuration();updateClock();
+  editorRoot.hidden=true;hideNoteContextMenu();document.body.classList.remove('editor-open');$('#stage').classList.remove('live-editing');$('#editNotes').classList.remove('active');$('#editNotes').lastChild.textContent=' EDIT';for(const id of ['saveProject','exportVideo','hostSession'])$('#'+id).disabled=!notes.length;selectedNoteIds.clear();editorDrag=null;arrangementDrag=null;resetArrangementTouches();noteHitRegions=[];arrangementHitRegions=[];editorHistory=[];editorHistoryIndex=-1;selectedTransposeId=null;editorTransposes=[];updateEditorHistoryControls();recalculateDuration();updateClock();
 }
 function closeEditorToStage(){closeEditor();if(editorRoot.hidden)enableStageQuickEdit()}
 function saveEditorChanges(){
@@ -563,7 +588,14 @@ function renderArrangement(){
   $('#arrangementClock').textContent=`${format(time)} / ${format(duration)}`;
 }
 arrangementCanvas.addEventListener('pointerdown',event=>{
-  if(editorRoot.hidden||event.button!==0)return;hideNoteContextMenu();event.preventDefault();const bounds=arrangementCanvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,g=arrangementGeometry(bounds.width,bounds.height),region=[...arrangementHitRegions].reverse().find(item=>x>=item.x&&x<=item.x+item.width&&y>=item.y&&y<=item.y+item.height);
+  if(editorRoot.hidden||event.button!==0)return;
+  if(event.pointerType==='touch'){
+    arrangementTouchPointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    try{arrangementCanvas.setPointerCapture(event.pointerId)}catch{}
+    if(arrangementTouchPointers.size>=2){event.preventDefault();startArrangementPinch();return}
+    if(arrangementPinchGesture)return;
+  }
+  hideNoteContextMenu();event.preventDefault();const bounds=arrangementCanvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,g=arrangementGeometry(bounds.width,bounds.height),region=[...arrangementHitRegions].reverse().find(item=>x>=item.x&&x<=item.x+item.width&&y>=item.y&&y<=item.y+item.height);
   if(region?.type==='transpose'){
     const cue=editorTransposes.find(item=>item.id===region.cueId);if(!cue)return;
     selectedTransposeId=cue.id;selectedNoteIds.clear();updateEditorInspector();beginEditorAction();
@@ -572,13 +604,17 @@ arrangementCanvas.addEventListener('pointerdown',event=>{
   if(region?.type==='backing'){const resize=Math.abs(x-(region.x+region.width))<=12;arrangementDrag={pointerId:event.pointerId,type:resize?'backing-resize':'backing',startClientX:event.clientX,originalOffset:backingOffset,originalLength:backingTimelineDuration(),pps:g.pps};arrangementCanvas.setPointerCapture?.(event.pointerId);return}
   if(region?.type==='note'){const note=editorNotes.find(item=>item.id===region.noteId);if(!note)return;const additive=event.shiftKey||event.ctrlKey||event.metaKey;if(additive){selectEditorNote(note.id,true);return}const alreadySelected=selectedNoteIds.has(note.id);if(!alreadySelected)selectEditorNote(note.id);const canResize=selectedNoteIds.size===1&&region.width>=16,rightEdge=canResize&&Math.abs(x-(region.x+region.width))<=9,leftEdge=canResize&&Math.abs(x-region.x)<=9;beginEditorAction();arrangementDrag={pointerId:event.pointerId,type:rightEdge?'note-resize-right':leftEdge?'note-resize-left':'note',noteId:note.id,timeOffset:g.timeAt(x)-note.start,startClientX:event.clientX,original:{...note},...noteMoveSnapshot(note),pps:g.pps,moved:false};arrangementCanvas.setPointerCapture?.(event.pointerId);return}
   if(x>=g.left&&x<=g.left+g.timelineWidth&&y>=g.notesY&&y<=g.notesBottom){arrangementDrag={pointerId:event.pointerId,type:'marquee',startX:x,startY:y,currentX:x,currentY:y,moved:false,additive:event.shiftKey||event.ctrlKey||event.metaKey,initialSelection:new Set(selectedNoteIds),seekTime:g.timeAt(x)};arrangementCanvas.setPointerCapture?.(event.pointerId);return}
+  if(event.pointerType==='touch'&&x>=g.left&&x<=g.left+g.timelineWidth&&y<g.notesY){
+    arrangementDrag={pointerId:event.pointerId,type:'timeline-pan',startClientX:event.clientX,originalScrollLeft:arrangementScroller.scrollLeft,seekTime:g.timeAt(x),moved:false};
+    return;
+  }
   if(x>=g.left&&x<=g.left+g.timelineWidth)seekTo(g.timeAt(x));selectEditorNote(null);
 });
 arrangementCanvas.addEventListener('contextmenu',event=>{
   if(editorRoot.hidden)return;event.preventDefault();const bounds=arrangementCanvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,region=[...arrangementHitRegions].reverse().find(item=>item.type==='note'&&x>=item.x&&x<=item.x+item.width&&y>=item.y&&y<=item.y+item.height);if(region)showNoteContextMenu(event,region.noteId);else hideNoteContextMenu();
 });
 arrangementCanvas.addEventListener('pointermove',event=>{
-  if(arrangementDrag)return;const bounds=arrangementCanvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,region=[...arrangementHitRegions].reverse().find(item=>x>=item.x&&x<=item.x+item.width&&y>=item.y&&y<=item.y+item.height);if(!region){arrangementCanvas.style.cursor='crosshair';return}const edge=region.type==='backing'?Math.abs(x-(region.x+region.width))<=12:(selectedNoteIds.size===1&&selectedNoteIds.has(region.noteId)&&region.width>=16&&(Math.abs(x-region.x)<=9||Math.abs(x-(region.x+region.width))<=9));arrangementCanvas.style.cursor=edge?'ew-resize':'grab';
+  if(arrangementDrag||arrangementPinchGesture)return;const bounds=arrangementCanvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,region=[...arrangementHitRegions].reverse().find(item=>x>=item.x&&x<=item.x+item.width&&y>=item.y&&y<=item.y+item.height);if(!region){arrangementCanvas.style.cursor='crosshair';return}const edge=region.type==='backing'?Math.abs(x-(region.x+region.width))<=12:(selectedNoteIds.size===1&&selectedNoteIds.has(region.noteId)&&region.width>=16&&(Math.abs(x-region.x)<=9||Math.abs(x-(region.x+region.width))<=9));arrangementCanvas.style.cursor=edge?'ew-resize':'grab';
 });
 canvas.addEventListener('pointerdown',event=>{
   if(!noteEditingActive()||event.button!==0)return;hideNoteContextMenu();event.preventDefault();const bounds=canvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top;
@@ -592,9 +628,27 @@ canvas.addEventListener('contextmenu',event=>{
   if(!noteEditingActive())return;event.preventDefault();const bounds=canvas.getBoundingClientRect(),x=event.clientX-bounds.left,y=event.clientY-bounds.top,region=[...noteHitRegions].reverse().find(item=>x>=item.x&&x<=item.x+item.width&&y>=item.visibleTop&&y<=item.visibleBottom);if(region)showNoteContextMenu(event,region.noteId);else hideNoteContextMenu();
 });
 document.addEventListener('pointermove',event=>{
+  if(arrangementTouchPointers.has(event.pointerId)){
+    arrangementTouchPointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(arrangementPinchGesture){
+      event.preventDefault();
+      const current=arrangementPinchCoordinates();
+      if(current&&arrangementPinch){
+        // Drag both fingers to scroll, move apart/together to zoom around midpoint.
+        arrangementScroller.scrollLeft-=current.centerX-arrangementPinch.lastCenterX;
+        arrangementPinch.lastCenterX=current.centerX;
+        setArrangementZoom(arrangementPinch.initialZoom*current.distance/arrangementPinch.initialDistance,current.centerX);
+      }
+      return;
+    }
+  }
   if(arrangementDrag&&event.pointerId===arrangementDrag.pointerId){
     event.preventDefault();const bounds=arrangementCanvas.getBoundingClientRect(),g=arrangementGeometry(bounds.width,bounds.height),x=clamp(event.clientX-bounds.left,g.left,g.left+g.timelineWidth),y=clamp(event.clientY-bounds.top,g.notesY,g.notesBottom-.01);
-    if(arrangementDrag.type==='marquee'){
+    if(arrangementDrag.type==='timeline-pan'){
+      const delta=event.clientX-arrangementDrag.startClientX;
+      arrangementDrag.moved ||= Math.abs(delta)>4;
+      arrangementScroller.scrollLeft=arrangementDrag.originalScrollLeft-delta;
+    }else if(arrangementDrag.type==='marquee'){
       arrangementDrag.currentX=x;arrangementDrag.currentY=y;arrangementDrag.moved ||= Math.hypot(x-arrangementDrag.startX,y-arrangementDrag.startY)>4;const left=Math.min(arrangementDrag.startX,x),right=Math.max(arrangementDrag.startX,x),top=Math.min(arrangementDrag.startY,y),bottom=Math.max(arrangementDrag.startY,y),next=arrangementDrag.additive?new Set(arrangementDrag.initialSelection):new Set();for(const region of arrangementHitRegions)if(region.type==='note'&&region.x<=right&&region.x+region.width>=left&&region.y<=bottom&&region.y+region.height>=top)next.add(region.noteId);selectedTransposeId=null;selectedNoteIds=expandGroupedSelection(next);updateEditorInspector();
     }else if(arrangementDrag.type==='transpose'){
       const cue=editorTransposes.find(item=>item.id===arrangementDrag.cueId);if(!cue)return;
@@ -619,8 +673,20 @@ document.addEventListener('pointermove',event=>{
   }
 });
 document.addEventListener('pointerup',event=>{
+  if(arrangementTouchPointers.delete(event.pointerId)&&arrangementPinchGesture){
+    if(arrangementTouchPointers.size<2)arrangementPinch=null;
+    if(!arrangementTouchPointers.size)arrangementPinchGesture=false;
+    return;
+  }
   if(editorDrag&&event.pointerId===editorDrag.pointerId){const drag=editorDrag;editorDrag=null;if(drag.moved){if(stageQuickEdit)commitStageQuickEdit('Note moved.');else commitEditorAction()}}
-  if(arrangementDrag&&event.pointerId===arrangementDrag.pointerId){const drag=arrangementDrag,resized=drag.type==='backing-resize';if(drag.type==='marquee'&&!drag.moved){selectEditorNote(null);seekTo(drag.seekTime)}arrangementDrag=null;arrangementCanvas.style.cursor='crosshair';if(drag.moved&&(drag.type.startsWith('note')||drag.type==='transpose'))commitEditorAction();if(drag.type==='backing'||resized)persistProject();if(resized)$('#info').textContent=`Backsound resized to ${backingTimelineDuration().toFixed(2)}s · ${backingPlaybackRate.toFixed(2)}× speed.`}
+  if(arrangementDrag&&event.pointerId===arrangementDrag.pointerId){const drag=arrangementDrag,resized=drag.type==='backing-resize';if((drag.type==='marquee'||drag.type==='timeline-pan')&&!drag.moved){selectEditorNote(null);seekTo(drag.seekTime)}arrangementDrag=null;arrangementCanvas.style.cursor='crosshair';if(drag.moved&&(drag.type.startsWith('note')||drag.type==='transpose'))commitEditorAction();if(drag.type==='backing'||resized)persistProject();if(resized)$('#info').textContent=`Backsound resized to ${backingTimelineDuration().toFixed(2)}s · ${backingPlaybackRate.toFixed(2)}× speed.`}
+});
+document.addEventListener('pointercancel',event=>{
+  if(arrangementTouchPointers.delete(event.pointerId)){
+    if(arrangementTouchPointers.size<2)arrangementPinch=null;
+    if(!arrangementTouchPointers.size)arrangementPinchGesture=false;
+  }
+  if(arrangementDrag?.pointerId===event.pointerId){arrangementDrag=null;arrangementCanvas.style.cursor='crosshair'}
 });
 arrangementCanvas.addEventListener('wheel',event=>{
   if(editorRoot.hidden||arrangementDrag||event.ctrlKey||event.shiftKey||Math.abs(event.deltaX)>Math.abs(event.deltaY)||!event.deltaY)return;
