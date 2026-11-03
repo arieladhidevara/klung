@@ -76,3 +76,14 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
 @media(max-width:700px){.live-editor{inset:0;padding:0}.arrangement-window{width:100vw;height:100dvh;min-height:0;border:0;border-radius:0}.arrangement-header{height:59px;padding:0 9px 0 13px}.arrangement-header strong{font-size:19px}.arrangement-header-actions .live-tool{padding:0 8px}.arrangement-footer span{display:none}.arrangement-footer{justify-content:flex-end}.arrangement-timeline-wrap{min-height:220px}.stage-edit-hud>span{display:none}}
 
 .mobile-note-choice.unused{opacity:.58;filter:saturate(.72)}.mobile-note-choice.unused.selected{opacity:1;filter:none}
+
+/* Transpose event editing */
+.arrangement-controls #editorAddTranspose{flex:none;border:1px solid #c7a64a;background:#463d21;color:#ffe5a0;white-space:nowrap}
+.arrangement-controls #editorAddTranspose:hover{background:#64512b;border-color:#ffcf52}
+.arrangement-controls #transposeField{border-color:#a18a44;color:#ffd979;white-space:nowrap}
+.arrangement-controls #transposeField[hidden]{display:none}
+.arrangement-controls #editorTransposeAt{width:62px}
+@media(max-width:900px){
+  .arrangement-controls{flex-wrap:wrap;gap:6px;padding-top:8px;padding-bottom:8px}
+  .arrangement-controls .live-selection{min-width:90px}
+}
