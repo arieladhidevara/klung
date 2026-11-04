@@ -212,7 +212,9 @@ function setMediaPosition(media,timeline,offset=0,timelineRate=1,forcePosition=t
   if(!media.src)return false;const mediaTime=(timeline-offset)*timelineRate;media.playbackRate=timelineRate*playbackSpeed;
   if(mediaTime<0||!Number.isFinite(media.duration)||mediaTime>=media.duration){media.pause();return false}
   const drift=Math.abs(media.currentTime-mediaTime);
-  if(forcePosition||media.paused||drift>.7)media.currentTime=Math.max(0,mediaTime);return true;
+  // Do not repeatedly seek a paused media element while play() is still pending.
+  // In particular, Safari can delay the start of backed audio after a user gesture.
+  if(forcePosition||drift>.7)media.currentTime=Math.max(0,mediaTime);return true;
 }
 function syncTimelineMedia(timeline,shouldPlay,forcePosition=true){
   const primaryReady=isAudio&&setMediaPosition($('#audio'),timeline,0,1,forcePosition),backingReady=Boolean(backingUrl)&&setMediaPosition($('#backingAudio'),timeline,backingOffset,backingPlaybackRate,forcePosition);
@@ -221,15 +223,29 @@ function syncTimelineMedia(timeline,shouldPlay,forcePosition=true){
     else if((!shouldPlay||!ready)&&!media.paused)media.pause();
   }
 }
+// One media clock for recording and playback. The backing track is authoritative
+// whenever it covers the timeline, including while play() is starting/buffering.
+function backingTimelinePosition(timeline){
+  if(!backingUrl||!backingDuration)return null;
+  const backing=$('#backingAudio');
+  const end=backingOffset+backingTimelineDuration();
+  if(timeline<backingOffset||timeline>=end||backing.ended||backing.readyState<1||!Number.isFinite(backing.currentTime))return null;
+  return backingOffset+backing.currentTime/Math.max(.01,backingPlaybackRate);
+}
 function mediaTimelinePosition(){
+  const backingPosition=backingTimelinePosition(time);
+  if(backingPosition!==null)return backingPosition;
+  // When a backing track exists, the primary audio must never override its clock.
+  if(backingUrl)return null;
   const primary=$('#audio');
   if(isAudio&&!primary.paused&&!primary.ended&&Number.isFinite(primary.currentTime))return primary.currentTime;
-  const backing=$('#backingAudio');
-  if(backingUrl&&!backing.paused&&!backing.ended&&Number.isFinite(backing.currentTime))return backingOffset+backing.currentTime/Math.max(.01,backingPlaybackRate);
   return null;
 }
 function maintainTimelineMedia(timeline,now){
-  if(now-lastMediaMaintenanceAt<1000)return;
+  // Check frequently at the start boundary so audio doesn't start up to a second
+  // after the visual timeline reaches a positive backing offset.
+  const nearBackingStart=backingUrl&&timeline>=backingOffset-.3&&timeline<backingOffset+.2;
+  if(now-lastMediaMaintenanceAt<(nearBackingStart?50:1000))return;
   lastMediaMaintenanceAt=now;syncTimelineMedia(timeline,true,false);
 }
 function syncRecordingBacking(timeline,shouldPlay,forcePosition=true){
@@ -765,15 +781,15 @@ function setRecordingControls(active){
 }
 function recordElapsed(){
   if(recording&&recordingPlaying&&backingUrl){
-    const media=$('#backingAudio');
-    if(!media.paused&&!media.ended&&media.readyState>=2&&Number.isFinite(media.currentTime)){
-      // Playback follows HTMLMediaElement.currentTime. Recording must use that
-      // same clock, not performance.now(), to compensate for delayed audio
-      // startup and buffering on iOS/Safari.
-      const synced=Math.max(0,backingOffset+media.currentTime/Math.max(.01,backingPlaybackRate));
-      recordPosition=synced;
+    const fallback=recordPosition+(performance.now()-recordStartedAt)/1000*playbackSpeed;
+    const synced=backingTimelinePosition(fallback);
+    if(synced!==null){
+      // Notes recorded on a phone use exactly the same clock as the falling
+      // notes when the project is reopened on desktop. A pending play or
+      // buffering backing track freezes both clocks instead of drifting.
+      recordPosition=Math.max(0,synced);
       recordStartedAt=performance.now();
-      return synced;
+      return recordPosition;
     }
   }
   return Math.max(0,recordPosition+(recordingPlaying?(performance.now()-recordStartedAt)/1000*playbackSpeed:0));
