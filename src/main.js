@@ -11,7 +11,7 @@ const whites=[24,26,28,29,31,33,35];
 const all=Array.from({length:RANGE_MAX-RANGE_MIN+1},(_,i)=>RANGE_MIN+i);
 const whiteSet=new Set(whites);
 const black=all.filter(n=>!whiteSet.has(n));
-const noteNames=['Do','Di','Re','Ri','Mi','Fa','Fis','Sol','Sis','La','Lis','Si'];
+const noteNames=['Do','Di','Re','Ri','Mi','Fa','Fis','Sol','Sis','La','Lis','Ti'];
 const displayPitchName=n=>noteNames[((n%12)+12)%12];
 // A TRANSPOSE cue alerts every player; it does not shift audio pitches.
 const TRANSPOSE_LENGTH=.9;
