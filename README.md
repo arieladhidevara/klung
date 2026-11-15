@@ -66,9 +66,22 @@ npm run build
 3. Every player chooses one or more notes and taps **READY**.
 4. Press Play at any time. Connected phones follow the live master automatically; players who finish joining later are synchronized to the master's current position.
 
-Mobile participation is optional: Play works normally when nobody joins. When phones are connected, the master schedules playback ahead, each phone estimates its clock offset from several round trips, and the master sends periodic timeline corrections during playback. Live rooms use direct, encrypted WebRTC connections with Trystero's public signaling network, so the Vercel deployment does not need a persistent WebSocket server.
+Mobile participation is optional: Play works normally when nobody joins. When phones are connected, the master schedules playback ahead, each phone estimates its clock offset from several round trips, and the master sends periodic timeline corrections during playback. Live rooms use Trystero 0.27's experimental scalable multi-hop WebRTC overlay (up to **50 mobile players plus one master**, with approximately eight direct WebRTC neighbors per device). Instead of sending the complete melody as a single large message, the master sends small snapshot chunks so they can travel through the overlay without promoting each mobile to a direct connection. Phones send their note selection only to the master. Master playback is scheduled 3 seconds ahead to leave time for multi-hop delivery.
 
-Keep the laptop session open while players are connected. A restrictive network may still require TURN configuration; using the same reliable Wi-Fi is recommended for performances.
+**Important:** This is a design target, **not a verified guarantee** of 50 simultaneous phones with synchronized timing. Trystero's scaling feature is experimental. Test with 5, 10, 25, then 50 physical devices on the expected Wi-Fi and cellular networks. Mobile browser sleep/backgrounding and relay outages can still interrupt routes.
+
+### TURN fallback on Vercel
+
+Restrictive/cellular/public networks may fail direct WebRTC even after signaling succeeds. The `/api/turn-credentials` Vercel serverless endpoint creates short-lived (6-hour) credentials for Cloudflare Realtime TURN. Set these **server-side** environment variables in the Klung Vercel project:
+
+- `CLOUDFLARE_TURN_KEY_ID` — Cloudflare Realtime TURN key ID.
+- `CLOUDFLARE_TURN_KEY_TOKEN` — secret associated with that TURN key. **Never** prefix it with `VITE_` or put it in frontend code.
+
+Create the TURN key in the [Cloudflare Realtime dashboard](https://dash.cloudflare.com/) first. See [Cloudflare's credential-generation guide](https://developers.cloudflare.com/realtime/turn/generate-credentials/). Redeploy after setting the variables. If these variables are missing, the endpoint returns HTTP 503 and the app falls back to direct WebRTC/STUN, which may still fail on restrictive networks. The dashboard and TURN provider have separate billing; set usage limits/alerts and apply rate limiting/WAF rules to the publicly callable credential endpoint for public launches.
+
+Keep the master session open. In a test, join the master on Wi-Fi and a phone on cellular; check that the phone reaches the note picker, sets READY, and receives playback cues. If a mobile loses the master or cannot connect, tap **RECONNECT**.
+
+**Upgrade note:** Trystero 0.27 is wire-incompatible with 0.26. Everyone should refresh after deploying. Existing live sessions should be restarted.
 
 ## Audio notes
 
