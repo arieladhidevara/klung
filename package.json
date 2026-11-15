@@ -13,7 +13,7 @@
     "@spotify/basic-pitch": "1.0.1",
     "@tonejs/midi": "^2.0.28",
     "qrcode": "^1.5.4",
-    "trystero": "^0.26.0",
+    "trystero": "^0.27.0",
     "vite": "^6.3.5"
   }
 }
