@@ -1,7 +1,8 @@
-import {joinRoom} from 'trystero';
+import {joinRoom,scale} from 'trystero';
 import QRCode from 'qrcode';
 
-const APP_ID='app.klung-one.vercel.live.v1';
+const APP_ID='app.klung-one.vercel.live.v2';
+const MAX_PLAYERS=50,MAX_DIRECT_PEERS=8,SNAPSHOT_CHUNK_SIZE=6000;
 const JOIN_ORIGIN='https://klung-one.vercel.app';
 const $=selector=>document.querySelector(selector);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -16,7 +17,8 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   const isMobile=Boolean(joinCode)&&(location.pathname.replace(/\/+$/,'')==='/join'||params.has('mobile'));
   let role=isMobile?'mobile':null,room=null,code='',masterPeerId=null,snapshot=null,clockOffset=0,clockSamples=[],mobileSelection=new Set(),mobileTransport={playing:false,position:0,executeAt:0,playbackRate:1,status:'Waiting for master'};
   let stateAction,selectionAction,transportAction,clockAction,helloAction,mobileFrame=0,mobileLastFrame=0,wakeLock=null;
-  const peers=new Map(),pendingPings=new Map();
+  const peers=new Map(),pendingPings=new Map(),stateBuffers=new Map();
+  let joining=false;
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
   const displayedName=pitch=>noteNames[((pitch%12)+12)%12];
 
@@ -24,52 +26,144 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   function joinUrl(sessionCode){const url=new URL('/join',JOIN_ORIGIN);url.searchParams.set('session',sessionCode);url.searchParams.set('mobile','1');return url.toString()}
   function roomId(sessionCode){return `klung-${sessionCode.toLowerCase()}`}
   function showConnectionError(message){
-    if(role==='mobile'){$('#mobileConnectTitle').textContent='Could not connect';$('#mobileConnectText').textContent=message}
+    if(role==='mobile'){$('#mobileConnect').hidden=false;$('#mobileConnectTitle').textContent='Could not connect';$('#mobileConnectText').textContent=message;$('#mobileReconnect').hidden=false}
     else $('#info').textContent=message;
+  }
+
+  async function loadTurnServers(){
+    try{
+      const response=await fetch('/api/turn-credentials',{cache:'no-store',signal:AbortSignal.timeout(5000)});
+      if(!response.ok)throw new Error('TURN credentials unavailable');
+      const data=await response.json();
+      const servers=Array.isArray(data.iceServers)?data.iceServers:[];
+      return servers.filter(server=>server.username&&server.credential&&
+        (Array.isArray(server.urls)?server.urls:[server.urls]).some(url=>String(url).startsWith('turn')));
+    }catch(error){
+      console.warn('TURN fallback not configured or unavailable; using direct WebRTC only.',error);
+      return [];
+    }
+  }
+
+  function receiveSnapshot(data,peerId){
+    if(role!=='mobile'||!data)return;
+    if(data.kind!=='snapshot-chunk'){
+      if(Array.isArray(data.notes))acceptSnapshot(data,peerId);
+      return;
+    }
+    const {id,index,total,chunk}=data;
+    if(typeof id!=='string'||id.length>90||!Number.isInteger(index)||!Number.isInteger(total)||
+      index<0||total<1||total>500||index>=total||typeof chunk!=='string'||chunk.length>SNAPSHOT_CHUNK_SIZE)return;
+    let pending=stateBuffers.get(peerId);
+    if(!pending||pending.id!==id){
+      if(index!==0)return;
+      pending={id,total,chunks:new Array(total),received:0};
+      stateBuffers.set(peerId,pending);
+    }
+    if(pending.total!==total||pending.chunks[index]!==undefined)return;
+    pending.chunks[index]=chunk;pending.received++;
+    if(pending.received!==total)return;
+    stateBuffers.delete(peerId);
+    try{acceptSnapshot(JSON.parse(pending.chunks.join('')),peerId)}
+    catch(error){console.warn('Invalid song snapshot received',error)}
+  }
+
+  function acceptSnapshot(data,peerId){
+    if(!Array.isArray(data.notes)||!Number.isFinite(Number(data.duration)))return;
+    const firstContact=masterPeerId!==peerId;
+    masterPeerId=peerId;snapshot=data;
+    if(firstContact){
+      safeSend(helloAction,{device:navigator.userAgentData?.mobile?'Mobile player':'Browser player'},peerId);
+      runClockSync();
+    }
+    if($('#mobileCue').hidden||!mobileSelection.size)showMobilePicker();
   }
 
   function setupActions(){
     stateAction=room.makeAction('klung-state');selectionAction=room.makeAction('klung-selection');transportAction=room.makeAction('klung-transport');clockAction=room.makeAction('klung-clock');helloAction=room.makeAction('klung-hello');
-    stateAction.onMessage=(data,{peerId})=>{if(role!=='mobile')return;masterPeerId=peerId;snapshot=data;if($('#mobileCue').hidden||!mobileSelection.size)showMobilePicker();runClockSync()};
-    selectionAction.onMessage=(data,{peerId})=>{if(role!=='master')return;const player=peers.get(peerId)||{number:peers.size+1};player.selection=Array.isArray(data.pitches)?data.pitches.map(Number):[];player.ready=player.selection.length>0;peers.set(peerId,player);renderMasterPlayers();if(player.ready&&isPlaying())broadcastSync(getPosition())};
-    helloAction.onMessage=(data,{peerId})=>{if(role!=='master')return;const player=peers.get(peerId)||{number:peers.size+1};player.device=String(data?.device||'Mobile player').slice(0,36);peers.set(peerId,player);renderMasterPlayers();sendState(peerId)};
-    clockAction.onMessage=(data,{peerId})=>{
+    stateAction.onMessage((data,{peerId})=>receiveSnapshot(data,peerId));
+    selectionAction.onMessage((data,{peerId})=>{if(role!=='master')return;const player=peers.get(peerId)||{number:peers.size+1};player.selection=Array.isArray(data.pitches)?data.pitches.map(Number):[];player.ready=player.selection.length>0;peers.set(peerId,player);renderMasterPlayers();if(player.ready&&isPlaying())broadcastSync(getPosition())});
+    helloAction.onMessage((data,{peerId})=>{if(role!=='master')return;const player=peers.get(peerId)||{number:peers.size+1};player.device=String(data?.device||'Mobile player').slice(0,36);peers.set(peerId,player);renderMasterPlayers();sendState(peerId)});
+    clockAction.onMessage((data,{peerId})=>{
       if(role==='master'&&data?.kind==='ping'){safeSend(clockAction,{kind:'pong',id:data.id,clientSent:data.clientSent,masterNow:Date.now()},peerId);return}
       if(role==='mobile'&&data?.kind==='pong'&&peerId===masterPeerId){const localNow=Date.now(),sent=pendingPings.get(data.id)??data.clientSent,rtt=localNow-sent;pendingPings.delete(data.id);clockSamples.push({rtt,offset:data.masterNow+rtt/2-localNow});clockSamples.sort((a,b)=>a.rtt-b.rtt);clockOffset=clockSamples.slice(0,Math.min(5,clockSamples.length)).reduce((sum,sample)=>sum+sample.offset,0)/Math.min(5,clockSamples.length)}
-    };
-    transportAction.onMessage=(data,{peerId})=>{if(role!=='mobile'||peerId!==masterPeerId)return;applyMobileTransport(data)};
+    });
+    transportAction.onMessage((data,{peerId})=>{if(role!=='mobile'||peerId!==masterPeerId)return;applyMobileTransport(data)});
   }
 
-  function connect(sessionCode,nextRole){
-    role=nextRole;code=sessionCode;room=joinRoom({appId:APP_ID,password:sessionCode},roomId(sessionCode),{onJoinError:details=>showConnectionError(details?.error||'The peer-to-peer connection failed. Try the same Wi-Fi or another network.')});setupActions();
-    room.onPeerJoin=peerId=>{
-      if(role==='master'){peers.set(peerId,{number:peers.size+1,ready:false,selection:[]});renderMasterPlayers();sendState(peerId)}
-      else safeSend(helloAction,{device:navigator.userAgentData?.mobile?'Mobile player':'Browser player'},peerId);
-    };
-    room.onPeerLeave=peerId=>{if(role==='master'){peers.delete(peerId);renderMasterPlayers()}else if(peerId===masterPeerId){masterPeerId=null;mobileTransport.playing=false;setMobileStatus('MASTER DISCONNECTED',true)}};
+  async function connect(sessionCode,nextRole){
+    role=nextRole;code=sessionCode;
+    const turnConfig=await loadTurnServers();
+    room=joinRoom({
+      appId:APP_ID,password:sessionCode,identity:'none',maxUsers:MAX_PLAYERS+1,
+      use:[scale({maxDirectPeers:MAX_DIRECT_PEERS})],
+      ...(turnConfig.length?{turnConfig}:{})
+    },roomId(sessionCode));
+    setupActions();
+    room.onError(error=>{
+      console.warn('Live session network error',error);
+      if(error.code==='room-full')showConnectionError('This session is full (maximum 50 players).');
+      else if(error.code==='relay-failed')showConnectionError('Could not reach the connection service. Check your internet and reconnect.');
+      else if(error.code==='peer-connect-failed'&&role==='mobile'&&!snapshot)
+        showConnectionError('Could not connect to the master. Tap RECONNECT or try another network.');
+      else if(error.code==='decrypt-failed')showConnectionError('Session code mismatch. Please scan the QR again.');
+    });
+    room.onPeerJoin(({peerId})=>{
+      if(role==='master'&&!peers.has(peerId)){
+        peers.set(peerId,{number:peers.size+1,ready:false,selection:[]});
+        renderMasterPlayers();
+        sendState(peerId);
+      }
+      // A phone must not send a HELLO to every other phone in a 50-player room.
+      // It identifies the master from the first valid song snapshot instead.
+    });
+    room.onPeerLeave(({peerId})=>{
+      stateBuffers.delete(peerId);
+      if(role==='master'){peers.delete(peerId);renderMasterPlayers()}
+      else if(peerId===masterPeerId){
+        masterPeerId=null;mobileTransport.playing=false;setMobileStatus('MASTER DISCONNECTED',true);
+        $('#mobileReconnect').hidden=false;
+      }
+    });
   }
 
-  function sendState(target){safeSend(stateAction,{...getSnapshot(),sentAt:Date.now()},target)}
+  function sendState(target){
+    // Payloads above 16 KiB trigger direct connection promotion in scale().
+    // Small, ordered chunks keep full song snapshots on the scalable overlay.
+    const serialized=JSON.stringify({...getSnapshot(),sentAt:Date.now()});
+    const total=Math.ceil(serialized.length/SNAPSHOT_CHUNK_SIZE)||1;
+    const id=crypto.randomUUID?.()||String(Date.now());
+    const sender=stateAction;
+    (async()=>{
+      for(let index=0;index<total;index++){
+        if(!room||role!=='master')return;
+        const chunk=serialized.slice(index*SNAPSHOT_CHUNK_SIZE,(index+1)*SNAPSHOT_CHUNK_SIZE);
+        await sender.send({kind:'snapshot-chunk',id,index,total,chunk},target?{target}:undefined);
+      }
+    })().catch(error=>console.warn('Could not send song snapshot',error));
+  }
   function renderMasterPlayers(){
-    const list=$('#livePlayerList'),ready=[...peers.values()].filter(player=>player.ready).length;$('#livePlayerCount').textContent=`${peers.size} connected · ${ready} ready`;$('#liveSessionPlay').disabled=false;
+    const list=$('#livePlayerList'),ready=[...peers.values()].filter(player=>player.ready).length;$('#livePlayerCount').textContent=`${peers.size}/${MAX_PLAYERS} connected · ${ready} ready`;$('#liveSessionPlay').disabled=false;
     if(!peers.size){list.innerHTML='<small>Waiting for players…</small>';return}
     list.replaceChildren(...[...peers.values()].map(player=>{const row=document.createElement('div');row.className='live-player-row';const colors=(player.selection||[]).map(pitch=>`<b style="background:${noteColors[pitch%12]}"></b>`).join('');row.innerHTML=`<i></i><strong>Player ${player.number}</strong><small>${player.ready?'READY':'CHOOSING'}</small><span>${colors}${player.selection?.map(pitch=>displayedName(pitch)).join(' · ')||''}</span>`;return row}))
   }
 
   async function host(){
     if(room&&role==='master'){$('#liveSessionModal').hidden=false;return}
-    code=randomCode();connect(code,'master');const url=joinUrl(code);$('#liveSessionCode').textContent=`${code.slice(0,3)} ${code.slice(3)}`;$('#liveSessionLink').value=url;$('#liveSessionModal').hidden=false;$('#hostSession').classList.add('active');$('#hostSession').innerHTML='<span>●</span> LIVE';
+    if(joining)return;
+    joining=true;code=randomCode();
+    try{await connect(code,'master')}catch(error){showConnectionError('Could not start the session: '+error.message);joining=false;return}
+    joining=false;const url=joinUrl(code);$('#liveSessionCode').textContent=`${code.slice(0,3)} ${code.slice(3)}`;$('#liveSessionLink').value=url;$('#liveSessionModal').hidden=false;$('#hostSession').classList.add('active');$('#hostSession').innerHTML='<span>●</span> LIVE';
     try{await QRCode.toCanvas($('#liveSessionQr'),url,{width:260,margin:1,errorCorrectionLevel:'M',color:{dark:'#14211fff',light:'#ffffffff'}})}catch(error){showConnectionError('Could not generate QR: '+error.message)}
     renderMasterPlayers();
   }
 
   async function end(){
-    if(room)await room.leave().catch(()=>{});room=null;role=isMobile?'mobile':null;code='';masterPeerId=null;peers.clear();$('#liveSessionModal').hidden=true;$('#hostSession')?.classList.remove('active');if($('#hostSession'))$('#hostSession').innerHTML='<span>⌁</span> MOBILE';
+    if(room)await room.leave().catch(()=>{});room=null;role=isMobile?'mobile':null;code='';masterPeerId=null;peers.clear();stateBuffers.clear();$('#liveSessionModal').hidden=true;$('#hostSession')?.classList.remove('active');if($('#hostSession'))$('#hostSession').innerHTML='<span>⌁</span> MOBILE';
   }
 
   function preparePlay(position){
     if(!room||role!=='master'||!peers.size)return null;
-    const executeAt=Date.now()+1800,payload={command:'play',position,playbackRate:Number(getPlaybackRate?.())||1,executeAt,sequence:crypto.randomUUID?.()||String(executeAt)};safeSend(transportAction,payload);return {blocked:false,executeAt};
+    const executeAt=Date.now()+3000,payload={command:'play',position,playbackRate:Number(getPlaybackRate?.())||1,executeAt,sequence:crypto.randomUUID?.()||String(executeAt)};safeSend(transportAction,payload);return {blocked:false,executeAt};
   }
   function broadcastPause(position){if(room&&role==='master')safeSend(transportAction,{command:'pause',position,playbackRate:Number(getPlaybackRate?.())||1,masterNow:Date.now()})}
   function broadcastSeek(position,playing){if(room&&role==='master')safeSend(transportAction,{command:'sync',position,playing:Boolean(playing),playbackRate:Number(getPlaybackRate?.())||1,masterNow:Date.now()})}
@@ -140,8 +234,16 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
 
   function initMobile(){
     document.body.classList.add('mobile-player-mode');$('#mobilePlayer').hidden=false;$('#mobileReady').onclick=readyMobile;
-    if(!joinCode){showConnectionError('The session code is missing.');return}connect(joinCode,'mobile');
-    setTimeout(()=>{if(!snapshot)$('#mobileConnectText').textContent='Still looking for the master. Make sure their session stays open.'},8000);
+    $('#mobileReconnect').onclick=()=>location.reload();
+    if(!joinCode){showConnectionError('The session code is missing.');return}
+    connect(joinCode,'mobile').catch(error=>showConnectionError('Connection failed: '+error.message));
+    setTimeout(()=>{
+      if(!snapshot){
+        $('#mobileConnectTitle').textContent='Still connecting…';
+        $('#mobileConnectText').textContent='Make sure the master session is open. Try RECONNECT or a different network.';
+        $('#mobileReconnect').hidden=false;
+      }
+    },12000);
   }
 
   $('#liveSessionClose').onclick=()=>{$('#liveSessionModal').hidden=true};
