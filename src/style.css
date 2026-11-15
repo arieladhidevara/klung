@@ -231,3 +231,6 @@ body.mobile-record-mode .mobile-record-screen .key.black{
 @media (pointer:coarse) and (orientation:landscape){
   body.mobile-record-mode .mobile-record-screen{transform:none!important}
 }
+
+/* Relay connection / offline recovery */
+.mobile-reconnect{display:block;margin:22px auto 0;padding:13px 28px;border:0;border-radius:8px;background:#ffcf52;color:#15201d;font:800 13px "DM Sans",sans-serif;letter-spacing:1px}.mobile-reconnect[hidden],.mobile-connect[hidden]{display:none}
