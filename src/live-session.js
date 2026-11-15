@@ -103,6 +103,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   function sendFromPlayer(kind,data={}){
     return room?.send(kind,{...data,source:clientId})===true;
   }
+  function sayHello(){
+    const isReady=Boolean(snapshot&&mobileSelection.size&&!$('#mobileCue').hidden);
+    sendFromPlayer('hello',{
+      version:snapshotVersion||null,device:'Mobile player',
+      pitches:isReady?[...mobileSelection]:[]
+    });
+  }
   function updateOwnPresence(){
     room?.setPresence({id:clientId,role,ready:Boolean(mobileSelection.size)&&!$('#mobileCue').hidden,
       pitches:[...mobileSelection].slice(0,12)});
@@ -140,7 +147,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#mobileConnectTitle').textContent='Connected · loading song…';
       $('#mobileConnectText').textContent='Downloading the note timeline once.';
       $('#mobileReconnect').hidden=true;
-      sendFromPlayer('hello',{version:snapshotVersion||null,device:'Mobile player'});
+      sayHello();
       if(snapshot){
         if(mobileSelection.size){$('#mobileConnect').hidden=true;$('#mobileCue').hidden=false}
         void startClockSync();
@@ -182,6 +189,10 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
           await sendFromMaster('room-full',{target:id});return;
         }
         const player=peers.get(id)||{number:peers.size+1,selection:[],ready:false};
+        if(Array.isArray(data.pitches)){
+          player.selection=[...new Set(data.pitches.map(Number).filter(Number.isInteger))].slice(0,12);
+          player.ready=player.selection.length>0;
+        }
         player.lastSeen=Date.now();peers.set(id,player);
         renderMasterPlayers();
         if(data.version!==snapshotVersion)queueSnapshot(id);
@@ -282,7 +293,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       else showMobilePicker();
       // Master responds with its CURRENT playback position, even during a song.
       // Hold that command until clock synchronization has finished.
-      sendFromPlayer('hello',{version:snapshotVersion});
+      sayHello();
       void startClockSync();
     }catch(error){
       download=null;
@@ -482,7 +493,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   // the latest transport so missed Pause/Seek events don't leave the player behind.
   document.addEventListener('visibilitychange',()=>{
     if(!isMobile||document.visibilityState!=='visible'||!snapshot||!liveConnected())return;
-    sendFromPlayer('hello',{version:snapshotVersion});
+    sayHello();
     void startClockSync();
   });
 
