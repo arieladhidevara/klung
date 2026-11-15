@@ -44,6 +44,32 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
   const displayedName=pitch=>noteNames[((pitch%12)+12)%12];
   const liveConnected=()=>room?.connected()===true;
+  // A returning player keeps their Ready selection for this exact QR/session.
+  // No account is needed. A new QR/public key cannot accidentally reuse it.
+  const savedNotesKey=()=>`klung:ready:v1:${joinCode}:${joinKey}`;
+  function savedNotes(){
+    try{
+      const record=JSON.parse(localStorage.getItem(savedNotesKey())||'null');
+      if(!record?.ready||!Array.isArray(record.pitches))return null;
+      return [...new Set(record.pitches.map(Number).filter(Number.isInteger))].slice(0,12);
+    }catch{return null}
+  }
+  function saveReadyNotes(){
+    try{
+      localStorage.setItem(savedNotesKey(),JSON.stringify({
+        ready:true,pitches:[...mobileSelection],savedAt:Date.now()
+      }));
+    }catch{/* Private mode may not allow persistent storage. */}
+  }
+  function restoreReadyNotes(){
+    if(!snapshot)return false;
+    const stored=savedNotes();
+    if(!stored?.length)return false;
+    const valid=new Set(Array.isArray(allPitches)&&allPitches.length
+      ?allPitches:snapshot.notes.map(note=>note.pitch));
+    mobileSelection=new Set(stored.filter(pitch=>valid.has(pitch)));
+    return mobileSelection.size>0;
+  }
 
   function joinUrl(sessionCode,key){
     const url=new URL('/join',location.origin);
@@ -179,7 +205,15 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       receiveChunk(data);return;
     }
     if(data.kind==='transport'){
-      if(!snapshot){pendingTransport=data;return}
+      // Join/rejoin: don't calculate song time with an unsynchronized device clock.
+      // Keep only the newest command until a signed master pong establishes the offset.
+      if(!snapshot||!clockSamples.length){
+        if(!pendingTransport||Number(data.sequence)>Number(pendingTransport.sequence)){
+          pendingTransport=data;
+        }
+        if(snapshot&&!$('#mobileCue').hidden)setMobileStatus('SYNCING WITH MASTER');
+        return;
+      }
       applyMobileTransport(data);return;
     }
     if(data.kind==='pong'){
@@ -192,6 +226,10 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       clockSamples.sort((a,b)=>a.rtt-b.rtt);
       const samples=clockSamples.slice(0,Math.min(3,clockSamples.length));
       clockOffset=samples.reduce((sum,s)=>sum+s.offset,0)/samples.length;
+      if(pendingTransport&&snapshot){
+        const latest=pendingTransport;pendingTransport=null;
+        applyMobileTransport(latest);
+      }
       return;
     }
     if(data.kind==='room-full'){showConnectionError('Room is full. Maximum 50 players.');return}
@@ -239,10 +277,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       if(!Array.isArray(incoming.notes)||!Number.isFinite(Number(incoming.duration)))throw new Error('Invalid song');
       snapshot=incoming;snapshotVersion=data.version;masterId=data.source;
       download=null;
-      if($('#mobileCue').hidden||!mobileSelection.size)showMobilePicker();
-      if(pendingTransport){applyMobileTransport(pendingTransport);pendingTransport=null}
+      // First visit: choose notes. Returning visit: auto-restore Ready and catch up.
+      if(restoreReadyNotes())void readyMobile({restored:true});
+      else showMobilePicker();
+      // Master responds with its CURRENT playback position, even during a song.
+      // Hold that command until clock synchronization has finished.
       sendFromPlayer('hello',{version:snapshotVersion});
-      startClockSync();
+      void startClockSync();
     }catch(error){
       download=null;
       showConnectionError('Song download failed. Tap RECONNECT.');
@@ -340,21 +381,23 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(!snapshot)return;$('#mobileConnect').hidden=true;$('#mobileCue').hidden=true;$('#mobileNotePicker').hidden=false;const choices=$('#mobileNoteChoices'),counts=new Map();for(const note of snapshot.notes)counts.set(note.pitch,(counts.get(note.pitch)||0)+1);const pitches=Array.isArray(allPitches)&&allPitches.length?[...allPitches]:[...counts.keys()].sort((a,b)=>a-b),available=new Set(pitches);mobileSelection=new Set([...mobileSelection].filter(pitch=>available.has(pitch)));$('#mobileReady').disabled=!mobileSelection.size;choices.replaceChildren(...pitches.map(pitch=>{const count=counts.get(pitch)||0,button=document.createElement('button');button.type='button';button.className='mobile-note-choice';button.classList.toggle('selected',mobileSelection.has(pitch));button.classList.toggle('unused',!count);button.style.setProperty('--note-color',noteColors[pitch%12]);button.style.setProperty('--note-ink',noteInk(pitch));button.dataset.pitch=String(pitch);button.innerHTML=`${displayedName(pitch)}<small>${count} NOTES</small>`;button.onclick=()=>{mobileSelection.has(pitch)?mobileSelection.delete(pitch):mobileSelection.add(pitch);button.classList.toggle('selected',mobileSelection.has(pitch));$('#mobileReady').disabled=!mobileSelection.size};return button}))
   }
 
-  async function readyMobile(){
+  async function readyMobile({restored=false}={}){
     if(!mobileSelection.size||!snapshot)return;
+    saveReadyNotes();
     $('#mobileNotePicker').hidden=true;$('#mobileConnect').hidden=true;$('#mobileCue').hidden=false;
-    setMobileStatus(liveConnected()?'WAITING FOR MASTER':'OFFLINE');
+    setMobileStatus(restored?'SYNCING WITH MASTER':liveConnected()?'WAITING FOR MASTER':'OFFLINE');
     updateOwnPresence();
     sendFromPlayer('ready',{pitches:[...mobileSelection]});
     try{wakeLock=await navigator.wakeLock?.request('screen')}catch{}
-    try{await document.documentElement.requestFullscreen?.()}catch{}
+    // Browser fullscreen requires a direct tap. Don't request it on auto-restore.
+    if(!restored){try{await document.documentElement.requestFullscreen?.()}catch{}}
     cancelAnimationFrame(mobileFrame);mobileFrame=requestAnimationFrame(renderMobileCue);
   }
 
   function setMobileStatus(label,disconnected=false){const cue=$('#mobileCue');$('#mobileCueStatus').textContent=label;cue.classList.toggle('disconnected',disconnected);cue.classList.remove('playing');cue.style.background='#0d1715'}
   function applyMobileTransport(data){
     const sequence=Number(data.sequence)||0;
-    if(sequence<=lastSeq)return;
+    if(sequence<=lastSeq||!clockSamples.length)return;
     lastSeq=sequence;
     const playbackRate=Math.max(.1,Number(data.playbackRate)||Number(snapshot?.playbackSpeed)||1);
     if(data.command==='play'){
@@ -434,6 +477,14 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       }
     },12000);
   }
+
+  // Safari may freeze an inactive tab. On foreground resume, ask the master for
+  // the latest transport so missed Pause/Seek events don't leave the player behind.
+  document.addEventListener('visibilitychange',()=>{
+    if(!isMobile||document.visibilityState!=='visible'||!snapshot||!liveConnected())return;
+    sendFromPlayer('hello',{version:snapshotVersion});
+    void startClockSync();
+  });
 
   $('#liveSessionClose').onclick=()=>{$('#liveSessionModal').hidden=true};
   $('#liveSessionEnd').onclick=end;
