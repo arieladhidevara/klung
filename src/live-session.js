@@ -115,7 +115,10 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#mobileConnectText').textContent='Downloading the note timeline once.';
       $('#mobileReconnect').hidden=true;
       sendFromPlayer('hello',{version:snapshotVersion||null,device:'Mobile player'});
-      if(snapshot)startClockSync();
+      if(snapshot){
+        if(mobileSelection.size){$('#mobileConnect').hidden=true;$('#mobileCue').hidden=false}
+        void startClockSync();
+      }
     }else{
       $('#info').textContent='Live session connected. Players can scan the QR.';
       renderMasterPlayers();
@@ -123,8 +126,14 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
   function onDisconnect(){
     if(role==='mobile'){
-      if(!snapshot){$('#mobileConnectTitle').textContent='Reconnecting…';$('#mobileConnectText').textContent='Trying to reach the session relay.'}
-      else if(!$('#mobileCue').hidden&&!mobileTransport.playing)setMobileStatus('RECONNECTING…',true);
+      if(!snapshot){
+        $('#mobileConnectTitle').textContent='Reconnecting…';
+        $('#mobileConnectText').textContent='Trying to reach the session relay.';
+      }else if(!$('#mobileCue').hidden&&!mobileTransport.playing){
+        $('#mobileCue').hidden=true;$('#mobileConnect').hidden=false;
+        $('#mobileConnectTitle').textContent='Reconnecting…';
+        $('#mobileConnectText').textContent='Song is saved locally. Restoring master controls.';
+      }
       $('#mobileReconnect').hidden=false;
     }else $('#info').textContent='Live relay disconnected. Reconnecting automatically…';
   }
@@ -217,15 +226,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       data.index<0||data.index>=data.total||typeof data.chunk!=='string'||data.chunk.length>CHUNK_SIZE)return;
     if(data.version===snapshotVersion&&snapshot)return;
     if(!download||download.id!==data.transferId){
-      // Out-of-order late chunks may arrive; only first chunk starts a transfer.
-      if(data.index!==0)return;
+      // Chunks may arrive slightly out of order; assemble by index.
       download={id:data.transferId,total:data.total,parts:new Array(data.total),received:0};
-      $('#mobileConnectTitle').textContent='Downloading song…';
-      $('#mobileConnect').hidden=false;
+      if(!snapshot){$('#mobileConnectTitle').textContent='Downloading song…';$('#mobileConnect').hidden=false;}
     }
     if(download.total!==data.total||download.parts[data.index]!==undefined)return;
     download.parts[data.index]=data.chunk;download.received++;
-    $('#mobileConnectText').textContent=Math.round(100*download.received/download.total)+'% of the song loaded';
+    if(!snapshot)$('#mobileConnectText').textContent=Math.round(100*download.received/download.total)+'% of the song loaded';
     if(download.received!==download.total)return;
     try{
       const incoming=JSON.parse(download.parts.join(''));
@@ -334,7 +341,11 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
 
   async function readyMobile(){
-    if(!mobileSelection.size||!masterPeerId)return;safeSend(selectionAction,{pitches:[...mobileSelection]},masterPeerId);$('#mobileNotePicker').hidden=true;$('#mobileCue').hidden=false;setMobileStatus('WAITING FOR MASTER');
+    if(!mobileSelection.size||!snapshot)return;
+    $('#mobileNotePicker').hidden=true;$('#mobileConnect').hidden=true;$('#mobileCue').hidden=false;
+    setMobileStatus(liveConnected()?'WAITING FOR MASTER':'OFFLINE');
+    updateOwnPresence();
+    sendFromPlayer('ready',{pitches:[...mobileSelection]});
     try{wakeLock=await navigator.wakeLock?.request('screen')}catch{}
     try{await document.documentElement.requestFullscreen?.()}catch{}
     cancelAnimationFrame(mobileFrame);mobileFrame=requestAnimationFrame(renderMobileCue);
@@ -342,11 +353,27 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
 
   function setMobileStatus(label,disconnected=false){const cue=$('#mobileCue');$('#mobileCueStatus').textContent=label;cue.classList.toggle('disconnected',disconnected);cue.classList.remove('playing');cue.style.background='#0d1715'}
   function applyMobileTransport(data){
+    const sequence=Number(data.sequence)||0;
+    if(sequence<=lastSeq)return;
+    lastSeq=sequence;
     const playbackRate=Math.max(.1,Number(data.playbackRate)||Number(snapshot?.playbackSpeed)||1);
-    if(data.command==='play'){mobileTransport={playing:true,position:Number(data.position)||0,executeAt:Number(data.executeAt)||Date.now()+clockOffset,playbackRate,status:'Get ready'};$('#mobileCue').classList.add('playing');return}
-    if(data.command==='pause'){mobileTransport={playing:false,position:Number(data.position)||0,executeAt:0,playbackRate,status:'PAUSED BY MASTER'};setMobileStatus('PAUSED BY MASTER');return}
+    if(data.command==='play'){
+      mobileTransport={playing:true,position:Number(data.position)||0,
+        executeAt:Number(data.executeAt)||Date.now()+clockOffset,playbackRate,status:'Get ready'};
+      $('#mobileCue').classList.add('playing');return;
+    }
+    if(data.command==='pause'){
+      mobileTransport={playing:false,position:Number(data.position)||0,executeAt:0,
+        playbackRate,status:'PAUSED BY MASTER'};
+      setMobileStatus('PAUSED BY MASTER');return;
+    }
     if(data.command==='sync'){
-      const corrected=(Number(data.position)||0)+(data.playing?Math.max(0,(Date.now()+clockOffset-(Number(data.masterNow)||Date.now()+clockOffset))/1000)*playbackRate:0);mobileTransport={playing:Boolean(data.playing),position:corrected,executeAt:Date.now()+clockOffset,playbackRate,status:data.playing?'Playing':'Waiting for master'};
+      const masterNow=Date.now()+clockOffset;
+      const elapsed=data.playing?Math.max(0,(masterNow-(Number(data.masterNow)||masterNow))/1000):0;
+      const corrected=(Number(data.position)||0)+elapsed*playbackRate;
+      mobileTransport={playing:Boolean(data.playing),position:corrected,executeAt:masterNow,
+        playbackRate,status:data.playing?'Playing':'Waiting for master'};
+      if(!data.playing)setMobileStatus('WAITING FOR MASTER');
     }
   }
 
@@ -386,10 +413,26 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(timeline>(snapshot.duration||0)+.5){mobileTransport.playing=false;mobileTransport.status='Finished';setMobileStatus('FINISHED')}
   }
 
-  function initMobile(){
-    document.body.classList.add('mobile-player-mode');$('#mobilePlayer').hidden=false;$('#mobileReady').onclick=readyMobile;
-    if(!joinCode){showConnectionError('The session code is missing.');return}connect(joinCode,'mobile');
-    setTimeout(()=>{if(!snapshot)$('#mobileConnectText').textContent='Still looking for the master. Make sure their session stays open.'},8000);
+  async function initMobile(){
+    document.body.classList.add('mobile-player-mode');
+    $('#mobilePlayer').hidden=false;$('#mobileReady').onclick=readyMobile;
+    $('#mobileReconnect').onclick=()=>{room?.reconnect();$('#mobileReconnect').hidden=true};
+    if(!joinCode||!joinKey){showConnectionError('Session link is incomplete. Please scan the QR on the master again.');return}
+    if(!realtimeConfigured()){showConnectionError('Realtime relay has not been configured on this deployment.');return}
+    role='mobile';code=joinCode;
+    try{
+      verifier=await createVerifier(joinKey);
+      await connect(joinCode);
+    }catch(error){
+      showConnectionError('Connection failed: '+(error?.message||error));
+    }
+    setTimeout(()=>{
+      if(!snapshot&&room){
+        $('#mobileConnectTitle').textContent='Still waiting for master…';
+        $('#mobileConnectText').textContent='Keep the master session open, or tap RECONNECT.';
+        $('#mobileReconnect').hidden=false;
+      }
+    },12000);
   }
 
   $('#liveSessionClose').onclick=()=>{$('#liveSessionModal').hidden=true};
@@ -397,7 +440,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   $('#liveSessionCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#liveSessionLink').value);$('#liveSessionCopy').textContent='COPIED';setTimeout(()=>$('#liveSessionCopy').textContent='COPY',1200)}catch{}}
   $('#liveSessionPlay').onclick=()=>onMasterPlay();
   $('#hostSession').onclick=host;
-  if(isMobile)initMobile();
+  if(isMobile)void initMobile();
 
   return {isMobile,host,end,preparePlay,broadcastPause,broadcastSeek,broadcastSync,refresh,show:()=>{$('#liveSessionModal').hidden=false},isHosting:()=>Boolean(room&&role==='master')};
 }
