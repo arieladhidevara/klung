@@ -3,7 +3,8 @@ import QRCode from 'qrcode';
 
 const APP_ID='app.klung-one.vercel.live.v2';
 const MAX_PLAYERS=50,MAX_DIRECT_PEERS=8,SNAPSHOT_CHUNK_SIZE=6000;
-const JOIN_ORIGIN='https://klung-one.vercel.app';
+// Use the currently deployed origin so preview QR codes never open older production clients.
+const JOIN_ORIGIN=location.origin;
 const $=selector=>document.querySelector(selector);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
