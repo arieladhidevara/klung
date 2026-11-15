@@ -140,7 +140,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   function connect(sessionCode){
     room?.close();
     room=createRealtimeHub({
-      code:sessionCode,clientId,onReady,onPresence,onDisconnect,
+      code:sessionCode,clientId,role,onReady,onPresence,onDisconnect,
       onError:message=>showConnectionError(String(message)),
       onEvent:data=>{void handleMessage(data)}
     });
