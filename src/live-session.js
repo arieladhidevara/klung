@@ -40,7 +40,8 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   let mobileFrame=0,mobileLastFrame=0,wakeLock=null,joining=false;
   let transportSeq=0,lastSeq=0,lastSyncAt=0,pendingTransport=null,masterTransport=null;
   let download=null,downloadQueue=new Set(),downloadTimer=null,clockTimer=null;
-  const peers=new Map(),pendingPings=new Map();
+  const peers=new Map(),pendingPings=new Map(),leaveTimers=new Map();
+  let onlinePresence=new Set();
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
   const displayedName=pitch=>noteNames[((pitch%12)+12)%12];
   const liveConnected=()=>room?.connected()===true;
@@ -131,9 +132,19 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
   function onPresence(list){
     if(role==='master'){
-      const visible=new Set(list.filter(p=>p.role==='mobile'&&typeof p.id==='string').map(p=>p.id));
-      for(const [id,player] of peers){
-        if(!visible.has(id)&&Date.now()-player.lastSeen>5000)peers.delete(id);
+      onlinePresence=new Set(list.filter(p=>p.role==='mobile'&&typeof p.id==='string').map(p=>p.id));
+      for(const [id] of peers){
+        if(onlinePresence.has(id)){
+          const timer=leaveTimers.get(id);
+          if(timer)clearTimeout(timer);
+          leaveTimers.delete(id);
+        }else if(!leaveTimers.has(id)){
+          // Presence can briefly disappear during refresh. Remove only after grace.
+          leaveTimers.set(id,setTimeout(()=>{
+            leaveTimers.delete(id);
+            if(!onlinePresence.has(id)){peers.delete(id);renderMasterPlayers()}
+          },3000));
+        }
       }
       renderMasterPlayers();
     }else if(masterId&&!list.some(p=>p.role==='master'&&p.id===masterId)){
@@ -194,6 +205,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
           player.ready=player.selection.length>0;
         }
         player.lastSeen=Date.now();peers.set(id,player);
+        if(leaveTimers.has(id)){clearTimeout(leaveTimers.get(id));leaveTimers.delete(id)}
         renderMasterPlayers();
         if(data.version!==snapshotVersion)queueSnapshot(id);
         else void sendCurrentTransport([id]);
@@ -349,6 +361,8 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(role==='master')await sendFromMaster('ended');
     else if(role==='mobile')sendFromPlayer('bye');
     room?.close();room=null;code='';masterId=null;snapshot=null;peers.clear();
+    for(const timer of leaveTimers.values())clearTimeout(timer);
+    leaveTimers.clear();onlinePresence.clear();
     if(downloadTimer)clearTimeout(downloadTimer);
     if(clockTimer)clearTimeout(clockTimer);
     role=isMobile?'mobile':null;
