@@ -1,3 +1,4 @@
+import { cueLabel } from './cue-label.js';
 import QRCode from 'qrcode';
 import {createRealtimeHub,realtimeConfigured} from './realtime-hub.js';
 
@@ -464,7 +465,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       c.save();c.beginPath();c.rect(0,top,width,Math.max(0,hitY-top+30));c.clip();
       c.globalAlpha=active?.96:delta>0?.62:.32;
       c.fillStyle='rgba(255,207,82,.36)';c.fillRect(0,cueTop,width,cueHeight);c.strokeStyle='#ffcf52';c.lineWidth=3;c.strokeRect(1,cueTop,width-2,cueHeight);
-      c.shadowColor='#ffcf52';c.shadowBlur=active?30:8;c.font=`900 ${Math.max(16,Math.min(28,width/15))}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#fff2b9';c.fillText('TRANSPOSE',width/2,(cueTop+cueHead)/2);c.restore();
+      c.shadowColor='#ffcf52';c.shadowBlur=active?30:8;c.font=`900 ${Math.max(16,Math.min(28,width/15))}px sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillStyle='#fff2b9';c.fillText(cueLabel(cue),width/2,(cueTop+cueHead)/2,Math.max(28,width-28));c.restore();
     }
     if(transposeActive)for(const pitch of selectedPitches)activePitches.add(pitch);
     c.shadowColor='#ffcf52';c.shadowBlur=10;c.fillStyle='#ffcf52';c.fillRect(0,hitY,width,3);c.shadowBlur=0;
@@ -477,7 +478,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     mobileFrame=requestAnimationFrame(renderMobileCue);if(ms-mobileLastFrame<1000/70||!snapshot||$('#mobileCue').hidden)return;mobileLastFrame=ms;const cue=$('#mobileCue');
     if(!mobileTransport.playing){renderMobileTimeline(mobileTransport.position);cue.classList.remove('playing','active');cue.style.background='#0d1715';$('#mobileCueStatus').textContent=mobileTransport.status.toUpperCase();return}
     const masterNow=Date.now()+clockOffset;if(masterNow<mobileTransport.executeAt){renderMobileTimeline(mobileTransport.position);cue.classList.remove('active');cue.style.background='#0d1715';$('#mobileCueStatus').textContent='GET READY';return}
-    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000*mobileTransport.playbackRate,active=renderMobileTimeline(timeline);cue.classList.add('playing');cue.classList.toggle('active',active);cue.style.background='#0d1715';$('#mobileCueStatus').textContent=(snapshot?.transposes||[]).some(item=>timeline>=Number(item.start)&&timeline<Number(item.start)+.9)?'TRANSPOSE':'PLAYING';
+    const timeline=mobileTransport.position+(masterNow-mobileTransport.executeAt)/1000*mobileTransport.playbackRate,active=renderMobileTimeline(timeline);cue.classList.add('playing');cue.classList.toggle('active',active);cue.style.background='#0d1715';const activeCue=(snapshot?.transposes||[]).find(item=>timeline>=Number(item.start)&&timeline<Number(item.start)+.9);$('#mobileCueStatus').textContent=activeCue?cueLabel(activeCue):'PLAYING';
     if(timeline>(snapshot.duration||0)+.5){mobileTransport.playing=false;mobileTransport.status='Finished';setMobileStatus('FINISHED')}
   }
 
