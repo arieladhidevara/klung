@@ -83,6 +83,9 @@ main,.stage,.canvas-wrap,.control-panel,.panel-body{min-width:0}.stage{max-width
 .arrangement-controls #transposeField{border-color:#a18a44;color:#ffd979;white-space:nowrap}
 .arrangement-controls #transposeField[hidden]{display:none}
 .arrangement-controls #editorTransposeAt{width:62px}
+.arrangement-controls #transposeLabelField{border-color:#a18a44;color:#ffd979;white-space:nowrap}
+.arrangement-controls #transposeLabelField[hidden]{display:none}
+.arrangement-controls #editorTransposeLabel{width:150px;min-width:100px;max-width:38vw;font-variant-numeric:normal;letter-spacing:normal}
 @media(max-width:900px){
   .arrangement-controls{flex-wrap:wrap;gap:6px;padding-top:8px;padding-bottom:8px}
   .arrangement-controls .live-selection{min-width:90px}

@@ -7,7 +7,8 @@
     "postinstall": "node scripts/copy-model.mjs",
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test"
   },
   "dependencies": {
     "@spotify/basic-pitch": "1.0.1",
