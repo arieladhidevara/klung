@@ -2,6 +2,7 @@ import './style.css';
 import { BasicPitch, outputToNotesPoly, noteFramesToTime } from '@spotify/basic-pitch';
 import { Midi } from '@tonejs/midi';
 import { createLiveSession } from './live-session.js';
+import { cueLabel, DEFAULT_CUE_LABEL } from './cue-label.js';
 const $=s=>document.querySelector(s);
 const canvas=$('#stageCanvas'), ctx=canvas.getContext('2d');
 const stageBackground=document.createElement('canvas'),stageBackgroundCtx=stageBackground.getContext('2d');
@@ -306,7 +307,7 @@ function normalizeProjectNote(note){
 async function loadProjectData(project,fallbackTitle='Saved Klung project'){
   if(!project||!Array.isArray(project.notes))throw new Error('This is not a valid Klung project file.');
   notes=project.notes.map(normalizeProjectNote).sort((a,b)=>a.start-b.start);
-  transposes=Array.isArray(project.transposes)?project.transposes.filter(cue=>Number.isFinite(Number(cue?.start))).map(cue=>({id:typeof cue.id==='string'&&cue.id?cue.id:nextTransposeId(),start:roundTime(Math.max(0,Number(cue.start)))})).sort((a,b)=>a.start-b.start):[];
+  transposes=Array.isArray(project.transposes)?project.transposes.filter(cue=>Number.isFinite(Number(cue?.start))).map(cue=>({id:typeof cue.id==='string'&&cue.id?cue.id:nextTransposeId(),start:roundTime(Math.max(0,Number(cue.start))),label:cueLabel(cue)})).sort((a,b)=>a.start-b.start):[];
   if(!notes.length)throw new Error('This Klung project does not contain any notes.');
   clearBackingTrack(false);clearSourceMedia();sourceDuration=Math.max(Number(project.sourceDuration??project.duration)||0,...notes.map(note=>note.start+note.duration));duration=sourceDuration;currentSourceName=String(project.sourceName||fallbackTitle);
   const settings=project.settings||{};lead=clamp(Number(settings.lead)||3,1.5,7);playbackSpeed=clamp(Number(settings.playbackSpeed)||1,.5,2);$('#lead').value=String(playbackSpeed);$('#leadText').textContent=playbackSpeed.toFixed(2)+'×';const savedVolume=clamp(Number(settings.volume??.7),0,1);$('#volume').value=String(savedVolume);$('#volText').textContent=Math.round(savedVolume*100)+'%';pianoMuted=Boolean(settings.pianoMuted);
@@ -454,7 +455,7 @@ function drawTransposeCue(c,cue,timeline,width,hitY,pixelsPerSecond,topLimit=0){
   const fill=c.createLinearGradient(0,barY,0,headY);fill.addColorStop(0,'rgba(255,207,82,.15)');fill.addColorStop(1,'rgba(255,207,82,.45)');
   c.fillStyle=fill;c.fillRect(0,barY,width,barHeight);c.strokeStyle='#ffcf52';c.lineWidth=3;c.strokeRect(1,barY+1,width-2,Math.max(1,barHeight-2));
   c.shadowColor='#ffcf52';c.shadowBlur=active?32:9;c.fillStyle='#fff1b9';c.font=`900 ${Math.max(17,Math.min(35,width/21))}px Outfit, sans-serif`;c.textAlign='center';c.textBaseline='middle';
-  c.fillText('TRANSPOSE',width/2,Math.max(barY+20,Math.min(headY-17,(barY+headY)/2)));c.restore();
+  c.fillText(cueLabel(cue),width/2,Math.max(barY+20,Math.min(headY-17,(barY+headY)/2)),Math.max(28,width-32));c.restore();
   return active;
 }
 function drawExportFrame(target,timeline,exportNotes,exportTransposes){
@@ -519,13 +520,13 @@ async function exportVideo(){
 }
 function updateEditorInspector(){
   const selected=selectedEditorNotes(),note=selected.length===1?selected[0]:null,cue=!editorRoot.hidden?editorTransposes.find(item=>item.id===selectedTransposeId):null,hasSelection=selected.length>0,grouped=selected.length>1&&selected.every(item=>item.groupId&&item.groupId===selected[0].groupId);
-  $('#transposeField').hidden=!cue;$('#editorTransposeAt').disabled=!cue;if(cue)$('#editorTransposeAt').value=cue.start.toFixed(2);
+  $('#transposeField').hidden=!cue;$('#transposeLabelField').hidden=!cue;$('#editorTransposeAt').disabled=!cue;$('#editorTransposeLabel').disabled=!cue;if(cue){$('#editorTransposeAt').value=cue.start.toFixed(2);$('#editorTransposeLabel').value=cueLabel(cue)}
   for(const element of [$('#editorPitch'),$('#editorStart'),$('#editorLength')])element.disabled=!note;
   $('#editorDelete').disabled=!hasSelection&&!cue;$('#editorCopy').disabled=!hasSelection;
   $('#editorPaste').disabled=!noteClipboard;
   $('#stageEditCopy').disabled=!hasSelection;$('#stageEditDelete').disabled=!hasSelection;$('#stageEditPaste').disabled=!noteClipboard;
   updateEditorHistoryControls();
-  const selectionText=cue?`TRANSPOSE · ${cue.start.toFixed(2)}s`:selected.length>1?`${selected.length} NOTES ${grouped?'GROUPED':'SELECTED'}`:note?`${displayPitchName(note.pitch)}  ·  ${note.start.toFixed(2)}s`:'SELECT NOTES';
+  const selectionText=cue?`${cueLabel(cue)} · ${cue.start.toFixed(2)}s`:selected.length>1?`${selected.length} NOTES ${grouped?'GROUPED':'SELECTED'}`:note?`${displayPitchName(note.pitch)}  ·  ${note.start.toFixed(2)}s`:'SELECT NOTES';
   $('#liveSelection').textContent=selectionText;$('#stageEditSelection').textContent=selectionText;
   if(!note){$('#editorPitch').value=String(RANGE_MIN);$('#editorStart').value='';$('#editorLength').value='';return}
   $('#editorPitch').value=String(note.pitch);$('#editorStart').value=note.start.toFixed(2);$('#editorLength').value=note.duration.toFixed(2);
@@ -574,9 +575,9 @@ function deleteSelectedEditorNote(){
 }
 function addTransposeCue(){
   if(editorRoot.hidden)return;beginEditorAction();
-  const cue={id:nextTransposeId(),start:roundTime(Math.max(0,time))};
+  const cue={id:nextTransposeId(),start:roundTime(Math.max(0,time)),label:DEFAULT_CUE_LABEL};
   editorTransposes.push(cue);editorTransposes.sort((a,b)=>a.start-b.start);selectedTransposeId=cue.id;selectedNoteIds.clear();
-  recalculateDuration();commitEditorAction();updateEditorInspector();$('#info').textContent=`Transpose cue added at ${cue.start.toFixed(2)}s. Drag it in the CUES lane to reposition.`;
+  recalculateDuration();commitEditorAction();updateEditorInspector();$('#info').textContent=`Cue added at ${cue.start.toFixed(2)}s. Rename it in the TEXT field or drag it in the CUES lane.`;
 }
 function hideNoteContextMenu(){noteContextMenu.hidden=true}
 function showNoteContextMenu(event,noteId){
@@ -633,7 +634,7 @@ function renderArrangement(){
   for(const cue of editorTransposes){
     const x=g.xAt(cue.start),y=g.transposeY+3,barW=clamp(g.pps*.8,76,140),barH=g.transposeH-6,selected=cue.id===selectedTransposeId;
     c.fillStyle=selected?'#ffcf52':'#7f692d';c.beginPath();c.roundRect(x,y,barW,barH,4);c.fill();c.strokeStyle=selected?'#fff':'#d9b955';c.lineWidth=selected?2:1;c.stroke();
-    c.font='800 9px DM Sans';c.textAlign='left';c.textBaseline='middle';c.fillStyle=selected?'#20251b':'#fff0b9';c.fillText('✦ TRANSPOSE',x+7,y+barH/2);
+    c.font='800 9px DM Sans';c.textAlign='left';c.textBaseline='middle';c.fillStyle=selected?'#20251b':'#fff0b9';c.fillText(`✦ ${cueLabel(cue)}`,x+7,y+barH/2,Math.max(20,barW-14));
     arrangementHitRegions.push({type:'transpose',cueId:cue.id,x,y,width:barW,height:barH});
   }
   for(let laneIndex=0;laneIndex<all.length;laneIndex++){const pitch=RANGE_MAX-laneIndex,y=g.notesY+laneIndex*g.laneH;c.fillStyle=laneIndex%2?'#0e1917':'#111e1b';c.fillRect(g.left,y,g.timelineWidth,g.laneH);c.strokeStyle='rgba(255,255,255,.055)';c.beginPath();c.moveTo(g.left,y+.5);c.lineTo(g.left+g.timelineWidth,y+.5);c.stroke();c.fillStyle=noteColor(pitch);c.font='800 8px DM Sans';c.textAlign='right';c.textBaseline='middle';c.fillText(displayPitchName(pitch),g.gutter,y+g.laneH/2)}
@@ -762,6 +763,11 @@ $('#editorAddTranspose').onclick=addTransposeCue;
 $('#editorTransposeAt').addEventListener('change',event=>{
   const cue=editorTransposes.find(item=>item.id===selectedTransposeId);if(!cue)return;
   beginEditorAction();cue.start=roundTime(Math.max(0,Number(event.target.value)||0));recalculateDuration();commitEditorAction();updateEditorInspector();
+});
+$('#editorTransposeLabel').addEventListener('change',event=>{
+  const cue=editorTransposes.find(item=>item.id===selectedTransposeId);if(!cue)return;
+  const label=cueLabel({label:event.target.value});if(label===cueLabel(cue)){event.target.value=label;return}
+  beginEditorAction();cue.label=label;commitEditorAction();updateEditorInspector();
 });
 $('#editorPitch').addEventListener('change',event=>{const note=selectedEditorNote();if(!note)return;beginEditorAction();note.pitch=Number(event.target.value);commitEditorAction();updateEditorInspector()});
 $('#editorStart').addEventListener('change',event=>{const note=selectedEditorNote();if(!note)return;beginEditorAction();note.start=roundTime(clamp(Number(event.target.value)||0,0,Math.max(0,duration-note.duration)));refreshEditedNoteSchedule(note);recalculateDuration();commitEditorAction();updateEditorInspector()});
@@ -1048,7 +1054,7 @@ function drawHitImpact(c,x,y,color,strength,scale=1){
  if(strength<=0)return;c.save();const radius=(22+22*strength)*scale,glow=c.createRadialGradient(x,y,0,x,y,radius);glow.addColorStop(0,`${color}f2`);glow.addColorStop(.28,`${color}8c`);glow.addColorStop(1,`${color}00`);c.globalAlpha=.35+.65*strength;c.fillStyle=glow;c.beginPath();c.arc(x,y,radius,0,Math.PI*2);c.fill();c.strokeStyle='#fff';c.lineWidth=(1.5+2.5*strength)*scale;c.beginPath();c.arc(x,y,(7+13*(1-strength))*scale,0,Math.PI*2);c.stroke();c.shadowColor=color;c.shadowBlur=24*scale;c.fillStyle='#fff';c.beginPath();c.arc(x,y,Math.max(2.5,4.5*strength)*scale,0,Math.PI*2);c.fill();c.restore();
 }
 liveSession=createLiveSession({
-  getSnapshot:()=>({title:$('#songTitle').textContent||'Klung!',duration,playbackSpeed,notes:notes.map(note=>({pitch:note.pitch,start:note.start,duration:note.duration})),transposes:transposes.map(cue=>({start:cue.start}))}),
+  getSnapshot:()=>({title:$('#songTitle').textContent||'Klung!',duration,playbackSpeed,notes:notes.map(note=>({pitch:note.pitch,start:note.start,duration:note.duration})),transposes:transposes.map(cue=>({start:cue.start,label:cueLabel(cue)}))}),
   getPosition:()=>time,
   getPlaybackRate:()=>playbackSpeed,
   isPlaying:()=>playing,
