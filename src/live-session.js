@@ -1,7 +1,7 @@
 import { cueLabel } from './cue-label.js';
 import QRCode from 'qrcode';
 import {createRealtimeHub,realtimeConfigured} from './realtime-hub.js';
-import {sessionRoute,newSessionCode,sessionUrl,findSessionMaster,isFourDigitCode} from './session-routing.js';
+import {sessionRoute,newSessionCode,sessionUrl,findSessionMaster,isFourDigitCode,isLegacyShortSessionPath,createMissingSessionGuard} from './session-routing.js';
 import {deliverSnapshotWithFallback} from './snapshot-delivery.js';
 import {canonicalJson} from './canonical-json.js';
 
@@ -48,6 +48,16 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
   const displayedName=pitch=>noteNames[((pitch%12)+12)%12];
   const liveConnected=()=>room?.connected()===true;
+  const missingSessionGuard=createMissingSessionGuard({
+    isConnected:liveConnected,
+    onMissing:()=>{
+      // A pairing code is active only while its master is present.
+      // Store a one-time explanation, but keep the URL exactly /joinsession.
+      try{sessionStorage.setItem('klung:join-feedback',
+        'No live session found for code '+joinCode+'. Check the code and try again.')}catch{}
+      location.replace(new URL('/joinsession',location.origin).toString());
+    }
+  });
   // A returning player keeps their Ready selection for this exact QR/session.
   // No account is needed. A new QR/public key cannot accidentally reuse it.
   const savedNotesKey=()=>`klung:ready:v1:${joinCode}:${sessionPublicKey}`;
@@ -155,12 +165,14 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     }else if(role==='mobile'){
       const discovered=findSessionMaster(list);
       if(discovered.status==='conflict'){
+        missingSessionGuard.markFound();
         // Multiple masters sharing a short code is ambiguous: reject, never guess.
         masterCodeConflict=true;
         showConnectionError('Two masters are using this code. Ask the master to start a new session.');
         return;
       }
       if(discovered.status==='found'){
+        missingSessionGuard.markFound();
         if((sessionPublicKey&&discovered.key!==sessionPublicKey)||
            (masterId&&discovered.id!==masterId)){
           masterCodeConflict=true;
@@ -189,6 +201,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   function onReady(){
     updateOwnPresence();
     if(role==='mobile'){
+      if(isFourDigitCode(joinCode)&&!joinKey)missingSessionGuard.start();
       $('#mobileConnectTitle').textContent='Connected · loading song…';
       $('#mobileConnectText').textContent='Downloading the note timeline once.';
       $('#mobileReconnect').hidden=true;
@@ -209,6 +222,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
   function onDisconnect(){
     if(role==='mobile'){
+      missingSessionGuard.stop();
       if(!snapshot){
         $('#mobileConnectTitle').textContent='Reconnecting…';
         $('#mobileConnectText').textContent='Trying to reach the session relay.';
@@ -482,6 +496,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(downloadTimer)clearTimeout(downloadTimer);
     if(clockTimer)clearTimeout(clockTimer);
     if(songRequestTimer)clearInterval(songRequestTimer);
+    missingSessionGuard.stop();
     for(const transfer of outgoingTransfers.values()){
       for(const notify of transfer.waiters)notify(false);
       transfer.waiters.clear();
@@ -613,6 +628,8 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(!joinCode){showConnectionError('Invalid session code. Enter the four-digit code shown by the master.');return}
     if(!realtimeConfigured()){showConnectionError('Realtime relay has not been configured on this deployment.');return}
     role='mobile';code=joinCode;
+    // Old /1234 bookmarks still join, but the visible URL is canonical.
+    if(isLegacyShortSessionPath(location.pathname))history.replaceState(null,'',sessionUrl(location.origin,joinCode));
     try{
       if(joinKey)verifier=await createVerifier(joinKey);
       await connect(joinCode);
@@ -655,6 +672,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     document.body.classList.add('join-session-mode');
     $('#joinSessionPage').hidden=false;
     const input=$('#joinSessionCode'),error=$('#joinSessionError');
+    try{
+      const feedback=sessionStorage.getItem('klung:join-feedback');
+      if(feedback){
+        error.textContent=feedback;
+        sessionStorage.removeItem('klung:join-feedback');
+      }
+    }catch{/* Private browsing can disable session storage. */}
     input.addEventListener('input',()=>{
       const digits=input.value.replace(/[^0-9]/g,'').slice(0,4);
       if(input.value!==digits)input.value=digits;
