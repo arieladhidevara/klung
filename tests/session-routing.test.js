@@ -2,17 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {
-  isFourDigitCode,sessionRoute,sessionUrl,newSessionCode,findSessionMaster
+  isFourDigitCode,sessionRoute,sessionUrl,newSessionCode,findSessionMaster,
+  isLegacyShortSessionPath,createMissingSessionGuard
 } from '../src/session-routing.js';
 
 test('QR and typed join codes navigate to identical clean room URLs',()=>{
   const base='https://klung-one.vercel.app';
-  assert.equal(sessionUrl(base,'1234'),base+'/1234');
-  assert.equal(sessionUrl(base,'0007'),base+'/0007');
+  assert.equal(sessionUrl(base,'1234'),base+'/joinsession/1234');
+  assert.equal(sessionUrl(base,'0007'),base+'/joinsession/0007');
+  assert.deepEqual(sessionRoute('/joinsession/1234'),{
+    isJoinPage:false,isPlayer:true,code:'1234',key:''
+  });
+  assert.equal(sessionRoute('/joinsession/0007/').code,'0007');
   assert.deepEqual(sessionRoute('/1234'),{
     isJoinPage:false,isPlayer:true,code:'1234',key:''
   });
   assert.equal(sessionRoute('/0007/').code,'0007');
+  assert.equal(isLegacyShortSessionPath('/1234'),true);
+  assert.equal(isLegacyShortSessionPath('/joinsession/1234'),false);
   assert.deepEqual(sessionRoute('/joinsession'),{
     isJoinPage:true,isPlayer:false,code:'',key:''
   });
@@ -64,8 +71,52 @@ test('Vercel SPA deep links serve index.html using official Vite catch-all',asyn
   assert.equal(config.cleanUrls,false);
   const rules=config.rewrites.filter(({destination})=>destination==='/index.html');
   assert.ok(rules.length>0);
-  for(const path of ['/joinsession','/1234','/0007','/join','/']){
+  for(const path of ['/joinsession','/joinsession/1234','/joinsession/0007','/1234','/0007','/join','/']){
     assert.ok(rules.some(({source})=>new RegExp('^'+source).test(path)),
       'Deep link '+path+' must resolve to SPA index.html');
   }
+});
+
+test('Inactive four-digit session redirects only after connected grace period',()=>{
+  let connected=false,redirects=0,scheduled=null,delay=0;
+  const guard=createMissingSessionGuard({
+    isConnected:()=>connected,onMissing:()=>redirects++,
+    schedule:(fn,ms)=>{scheduled=fn;delay=ms;return 42},
+    unschedule:()=>{scheduled=null}
+  });
+  guard.start();
+  assert.equal(scheduled,null,'no redirects while relay is disconnected');
+  connected=true;guard.start();
+  assert.equal(delay,7000);
+  assert.equal(typeof scheduled,'function');
+  scheduled();
+  assert.equal(redirects,1);
+});
+
+test('A discovered master cancels any automatic redirect, including after disconnect',()=>{
+  let connected=true,redirects=0,callback=null,cancellations=0;
+  const guard=createMissingSessionGuard({
+    isConnected:()=>connected,onMissing:()=>redirects++,
+    schedule:fn=>{callback=fn;return 1},
+    unschedule:()=>{cancellations++}
+  });
+  guard.start();
+  const oldCallback=callback;
+  guard.markFound();
+  assert.equal(cancellations,1);
+  oldCallback();
+  assert.equal(redirects,0,'no stale callback may redirect an active session');
+  guard.stop();connected=false;guard.start();connected=true;guard.start();
+  assert.equal(cancellations,1);
+  assert.equal(redirects,0,'master temporarily disconnecting never kicks player');
+});
+
+test('Connection loss prevents an incorrect not-found redirect',()=>{
+  let connected=true,redirects=0,callback=null;
+  const guard=createMissingSessionGuard({
+    isConnected:()=>connected,onMissing:()=>redirects++,
+    schedule:fn=>{callback=fn;return 3},unschedule:()=>{}
+  });
+  guard.start();connected=false;callback();
+  assert.equal(redirects,0);
 });
