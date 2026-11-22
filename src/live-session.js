@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import {createRealtimeHub,realtimeConfigured} from './realtime-hub.js';
 import {sessionRoute,newSessionCode,sessionUrl,findSessionMaster,isFourDigitCode} from './session-routing.js';
 import {deliverSnapshotWithFallback} from './snapshot-delivery.js';
+import {canonicalJson} from './canonical-json.js';
 
 const MAX_PLAYERS=50,CHUNK_SIZE=40000;
 const $=selector=>document.querySelector(selector);
@@ -85,7 +86,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   async function sendFromMaster(kind,data={},recipient=null){
     if(!liveConnected()||!signer)return false;
     const unsigned={kind,source:clientId,...data};
-    const bytes=encoder.encode(JSON.stringify(unsigned));
+    const bytes=encoder.encode(canonicalJson(unsigned));
     const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},signer,bytes);
     const signed={...unsigned,signature:toBase64Url(new Uint8Array(signature))};
     return recipient?room.sendDirect(kind,signed,recipient):room.send(kind,signed);
@@ -96,7 +97,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     try{
       return await crypto.subtle.verify(
         {name:'ECDSA',hash:'SHA-256'},verifier,fromBase64Url(signature),
-        encoder.encode(JSON.stringify(unsigned))
+        encoder.encode(canonicalJson(unsigned))
       );
     }catch{return false}
   }
