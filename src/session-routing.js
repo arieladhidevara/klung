@@ -4,7 +4,7 @@ export function isFourDigitCode(value){return FOUR_DIGITS.test(String(value||'')
 export function sessionRoute(pathname,search=''){
   const path=String(pathname||'/').replace(/\/+$/,'')||'/';
   const params=new URLSearchParams(search);
-  const pathCode=path.match(/^\/([0-9]{4})$/)?.[1]||'';
+  const pathCode=path.match(/^\/(?:joinsession\/)?([0-9]{4})$/)?.[1]||'';
   const legacyCode=(params.get('session')||'').trim().toUpperCase();
   const legacyPlayer=Boolean(legacyCode)&&(path==='/join'||params.has('mobile'));
   return {
@@ -16,7 +16,7 @@ export function sessionRoute(pathname,search=''){
 }
 export function sessionUrl(origin,code){
   if(!isFourDigitCode(code))throw new Error('Session code must have four digits.');
-  return new URL('/'+code,origin).toString();
+  return new URL('/joinsession/'+code,origin).toString();
 }
 export function newSessionCode(getValues=bytes=>crypto.getRandomValues(bytes)){
   // Rejection sampling avoids favoring some codes when mapping random bytes.
@@ -36,4 +36,30 @@ export function findSessionMaster(presences,expectedKey=''){
   if(candidates.length>1)return {status:'conflict'};
   if(!candidates.length)return {status:'waiting'};
   return {status:'found',...candidates[0]};
+}
+
+export function isLegacyShortSessionPath(pathname){
+  return /^\/[0-9]{4}\/?$/.test(String(pathname||''));
+}
+// New players should leave a non-existent room, but not get kicked out if
+// a previously discovered master briefly disconnects during a performance.
+// The grace period starts only after the phone's relay connection is ready.
+export function createMissingSessionGuard({
+  isConnected,onMissing,delayMs=7000,
+  schedule=(fn,ms)=>setTimeout(fn,ms),
+  unschedule=handle=>clearTimeout(handle)
+}){
+  let timer=null,masterDiscovered=false;
+  function stop(){
+    if(timer!==null){unschedule(timer);timer=null}
+  }
+  function start(){
+    if(masterDiscovered||timer!==null||!isConnected())return;
+    timer=schedule(()=>{
+      timer=null;
+      if(!masterDiscovered&&isConnected())onMissing();
+    },delayMs);
+  }
+  function markFound(){masterDiscovered=true;stop()}
+  return {start,stop,markFound};
 }
