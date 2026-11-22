@@ -14,6 +14,10 @@ export function sessionRoute(pathname,search=''){
     key:params.get('key')||''
   };
 }
+export function sessionUrl(origin,code){
+  if(!isFourDigitCode(code))throw new Error('Session code must have four digits.');
+  return new URL('/'+code,origin).toString();
+}
 export function newSessionCode(getValues=bytes=>crypto.getRandomValues(bytes)){
   // Rejection sampling avoids favoring some codes when mapping random bytes.
   const max=Math.floor(0x100000000/10000)*10000,bytes=new Uint32Array(1);
