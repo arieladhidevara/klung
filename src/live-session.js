@@ -41,6 +41,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   let mobileFrame=0,mobileLastFrame=0,wakeLock=null,joining=false;
   let transportSeq=0,lastSeq=0,lastSyncAt=0,pendingTransport=null,masterTransport=null;
   let download=null,downloadQueue=new Set(),downloadTimer=null,clockTimer=null;
+  let flushingSnapshots=false,expectedSnapshotVersion='';
   const peers=new Map(),pendingPings=new Map(),leaveTimers=new Map();
   let onlinePresence=new Set();
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
@@ -85,12 +86,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#mobileReconnect').hidden=false;
     }else $('#info').textContent=message;
   }
-  async function sendFromMaster(kind,data={}){
+  async function sendFromMaster(kind,data={},recipient=null){
     if(!liveConnected()||!signer)return false;
     const unsigned={kind,source:clientId,...data};
     const bytes=encoder.encode(JSON.stringify(unsigned));
     const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},signer,bytes);
-    return room.send(kind,{...unsigned,signature:toBase64Url(new Uint8Array(signature))});
+    const signed={...unsigned,signature:toBase64Url(new Uint8Array(signature))};
+    return recipient?room.sendDirect(kind,signed,recipient):room.send(kind,signed);
   }
   async function verifyFromMaster(data){
     if(!verifier||typeof data?.signature!=='string'||!data.source)return false;
@@ -106,7 +108,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     return room?.send(kind,{...data,source:clientId})===true;
   }
   function sayHello(){
-    const isReady=Boolean(snapshot&&mobileSelection.size&&!$('#mobileCue').hidden);
+    const isReady=Boolean(mobileSelection.size&&(snapshot||expectedSnapshotVersion));
     sendFromPlayer('hello',{
       version:snapshotVersion||null,device:'Mobile player',
       pitches:isReady?[...mobileSelection]:[]
@@ -167,6 +169,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     }else{
       $('#info').textContent='Live session connected. Players can scan the QR.';
       renderMasterPlayers();
+      if(downloadQueue.size)queueSnapshotFlush();
     }
   }
   function onDisconnect(){
@@ -225,6 +228,19 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(role!=='mobile'||!await verifyFromMaster(data))return;
     if(data.target&&data.target!==clientId&&!Array.isArray(data.target))return;
     if(Array.isArray(data.target)&&!data.target.includes(clientId))return;
+    if(data.kind==='snapshot-updated'){
+      if(typeof data.version!=='string'||!data.version||
+         data.version===snapshotVersion||data.version===expectedSnapshotVersion)return;
+      // A new song replaces the cached notes, but players keep their assigned pitches.
+      expectedSnapshotVersion=data.version;
+      snapshot=null;download=null;pendingTransport=null;clockSamples=[];
+      mobileTransport={playing:false,position:0,executeAt:0,playbackRate:1,status:'Updating song'};
+      $('#mobileCue').hidden=true;$('#mobileNotePicker').hidden=true;$('#mobileConnect').hidden=false;
+      $('#mobileConnectTitle').textContent='Updating song…';
+      $('#mobileConnectText').textContent='Downloading the latest notes for this phone.';
+      sayHello(); // Request the new version; the master will reply privately.
+      return;
+    }
     if(data.kind==='snapshot-chunk'){
       receiveChunk(data);return;
     }
@@ -259,33 +275,62 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(data.kind==='room-full'){showConnectionError('Room is full. Maximum 50 players.');return}
     if(data.kind==='ended'){showConnectionError('The master has ended this session.');room?.close()}
   }
-  function queueSnapshot(id=null){
-    if(id)downloadQueue.add(id);
-    else downloadQueue=new Set(['*']);
+  function queueSnapshotFlush(delay=350){
     if(downloadTimer)clearTimeout(downloadTimer);
-    downloadTimer=setTimeout(()=>{downloadTimer=null;void flushSnapshots()},350);
+    downloadTimer=setTimeout(()=>{downloadTimer=null;void flushSnapshots()},delay);
   }
-  async function flushSnapshots(){
-    if(!liveConnected()||role!=='master')return;
-    const targets=downloadQueue.has('*')?null:[...downloadQueue];
-    downloadQueue.clear();
-    const serialized=JSON.stringify({...getSnapshot(),version:snapshotVersion});
+  function queueSnapshot(id){
+    if(!id||!peers.has(id))return;
+    downloadQueue.add(id);
+    if(!flushingSnapshots)queueSnapshotFlush();
+  }
+  async function sendSnapshotToPlayer(id){
+    if(!peers.has(id)||!liveConnected())return true;
+    const version=snapshotVersion;
+    const serialized=JSON.stringify({...getSnapshot(),version});
     const total=Math.max(1,Math.ceil(serialized.length/CHUNK_SIZE));
     const transferId=randomId();
     for(let index=0;index<total;index++){
-      if(!liveConnected())return;
-      await sendFromMaster('snapshot-chunk',{
-        target:targets,transferId,version:snapshotVersion,index,total,
+      if(!liveConnected()||!peers.has(id))return false;
+      if(snapshotVersion!==version){queueSnapshot(id);return true}
+      // Only the addressed phone receives these large song chunks.
+      const sent=await sendFromMaster('snapshot-chunk',{
+        target:id,transferId,version,index,total,
         chunk:serialized.slice(index*CHUNK_SIZE,(index+1)*CHUNK_SIZE)
-      });
+      },id);
+      if(!sent)return false;
       if(total>1)await wait(60);
     }
-    if(targets)await sendCurrentTransport(targets);
-    else await sendCurrentTransport();
+    if(snapshotVersion===version)await sendCurrentTransport([id]);
+    return true;
+  }
+  async function flushSnapshots(){
+    if(flushingSnapshots||!liveConnected()||role!=='master')return;
+    flushingSnapshots=true;
+    try{
+      while(downloadQueue.size&&liveConnected()&&role==='master'){
+        // Four simultaneous targeted transfers at most, even when 50 phones join.
+        const targets=[...downloadQueue].slice(0,4);
+        for(const id of targets)downloadQueue.delete(id);
+        const results=await Promise.all(targets.map(async id=>{
+          try{return {id,ok:await sendSnapshotToPlayer(id)}}
+          catch(error){console.warn('Song transfer failed',error);return {id,ok:false}}
+        }));
+        const failed=results.filter(result=>!result.ok);
+        if(failed.length){
+          for(const {id} of failed)downloadQueue.add(id);
+          break; // Avoid a tight retry loop when the relay is unavailable.
+        }
+      }
+    }finally{
+      flushingSnapshots=false;
+      if(downloadQueue.size&&liveConnected()&&role==='master')queueSnapshotFlush(1500);
+    }
   }
   function receiveChunk(data){
     if(!Number.isInteger(data.index)||!Number.isInteger(data.total)||data.total<1||data.total>300||
       data.index<0||data.index>=data.total||typeof data.chunk!=='string'||data.chunk.length>CHUNK_SIZE)return;
+    if(expectedSnapshotVersion&&data.version!==expectedSnapshotVersion)return;
     if(data.version===snapshotVersion&&snapshot)return;
     if(!download||download.id!==data.transferId){
       // Chunks may arrive slightly out of order; assemble by index.
@@ -299,7 +344,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     try{
       const incoming=JSON.parse(download.parts.join(''));
       if(!Array.isArray(incoming.notes)||!Number.isFinite(Number(incoming.duration)))throw new Error('Invalid song');
-      snapshot=incoming;snapshotVersion=data.version;masterId=data.source;
+      snapshot=incoming;snapshotVersion=data.version;expectedSnapshotVersion='';masterId=data.source;
       download=null;
       // First visit: choose notes. Returning visit: auto-restore Ready and catch up.
       if(restoreReadyNotes())void readyMobile({restored:true});
@@ -399,7 +444,9 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   function refresh(){
     if(!liveConnected()||role!=='master')return;
     snapshotVersion=randomId();
-    queueSnapshot();
+    // Tell all phones the song changed; each downloads it on its own topic.
+    void sendFromMaster('snapshot-updated',{version:snapshotVersion});
+    void sendCurrentTransport();
     renderMasterPlayers();
   }
 

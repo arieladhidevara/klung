@@ -950,11 +950,11 @@ const zone=$('#dropZone');zone.addEventListener('dragover',e=>{e.preventDefault(
 $('#seek').addEventListener('input',e=>seekTo(duration*Number(e.target.value)/1000));
 $('#muteSong').onclick=()=>{setPianoMuted(!pianoMuted);persistProject()};
 function setPlaybackSpeed(value){
-  const now=performance.now();if(playing){time=Math.min(duration,initialTime+(now-startedAt)/1000*playbackSpeed);initialTime=time;startedAt=now}if(recordingPlaying){recordPosition=recordElapsed();recordStartedAt=now;time=recordPosition}playbackSpeed=clamp(Number(value)||1,.5,2);$('#lead').value=String(playbackSpeed);$('#leadText').textContent=playbackSpeed.toFixed(2)+'×';syncTimelineMedia(time,playing);if(recording)syncRecordingBacking(recordElapsed(),recordingPlaying);if(playing)liveSession?.broadcastSeek(time,true);persistProject();
+  const now=performance.now();if(playing){time=Math.min(duration,initialTime+(now-startedAt)/1000*playbackSpeed);initialTime=time;startedAt=now}if(recordingPlaying){recordPosition=recordElapsed();recordStartedAt=now;time=recordPosition}playbackSpeed=clamp(Number(value)||1,.5,2);$('#lead').value=String(playbackSpeed);$('#leadText').textContent=playbackSpeed.toFixed(2)+'×';syncTimelineMedia(time,playing);if(recording)syncRecordingBacking(recordElapsed(),recordingPlaying);liveSession?.broadcastSeek(time,playing);persistProject();
 }
 $('#lead').addEventListener('input',e=>setPlaybackSpeed(e.target.value));
 $('#volume').addEventListener('input',e=>{$('#volText').textContent=Math.round(e.target.value*100)+'%';if(mediaGraph){$('#audio').volume=$('#backingAudio').volume=1;updateMediaGains()}else{$('#audio').volume=$('#backingAudio').volume=Number(e.target.value)}});
-$('#audio').addEventListener('ended',()=>{if(playing&&duration<=sourceDuration+.05){playing=false;time=duration;syncTimelineMedia(time,false);syncPlayButtons();updateClock()}});
+$('#audio').addEventListener('ended',()=>{if(playing&&duration<=sourceDuration+.05){playing=false;time=duration;syncTimelineMedia(time,false);syncPlayButtons();updateClock();liveSession?.broadcastPause(time)}});
 $('#fullscreen').onclick=async()=>{if(document.fullscreenElement){await document.exitFullscreen()}else{document.body.classList.add('performance-mode');try{await document.documentElement.requestFullscreen()}catch(e){document.body.classList.remove('performance-mode');$('#info').textContent='Fullscreen unavailable: '+e.message}}};
 document.addEventListener('fullscreenchange',()=>{document.body.classList.toggle('performance-mode',Boolean(document.fullscreenElement)&&!mobileRecordingMode)});
 document.addEventListener('keydown',e=>{
