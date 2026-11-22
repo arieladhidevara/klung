@@ -59,16 +59,24 @@ npm run build
 - `W E T Y U`: black notes while recording.
 - `Escape`: stop recording or leave the editor.
 
-## Mobile player sessions
+## Mobile player sessions (master + up to 50 phones)
 
-1. Load or edit a song, then click **MOBILE** on the laptop master.
-2. Players scan the QR code. The production join URL is `https://klung-one.vercel.app/join?session=...`.
-3. Every player chooses one or more notes and taps **READY**.
-4. Press Play at any time. Connected phones follow the live master automatically; players who finish joining later are synchronized to the master's current position.
+The live room uses **a hosted Supabase Realtime relay, not WebRTC peer-to-peer**. Every phone only subscribes to a session-wide master broadcast; phones do **not** connect to one another. Phone-to-master HELLO, READY and clock pings use a separate upstream Realtime topic subscribed to by the master only.
 
-Mobile participation is optional: Play works normally when nobody joins. When phones are connected, the master schedules playback ahead, each phone estimates its clock offset from several round trips, and the master sends periodic timeline corrections during playback. Live rooms use direct, encrypted WebRTC connections with Trystero's public signaling network, so the Vercel deployment does not need a persistent WebSocket server.
+1. Configure a dedicated Supabase project for Klung! (recommended, rather than sharing production credentials with another app).
+2. Set these **public/publishable** Vercel environment variables (for Preview and Production when ready):
+   - `VITE_KLUNG_SUPABASE_URL`: the Supabase project URL, e.g. `https://YOUR_PROJECT.supabase.co`
+   - `VITE_KLUNG_SUPABASE_PUBLISHABLE_KEY`: the project's **publishable** API key (`sb_publishable_...`) or legacy anon key. **Never use service_role or a secret key.**
+3. Redeploy (Vite embeds public values at build time). A new master QR code automatically uses the current deployment's origin.
+4. Load a song and press **MOBILE** on the laptop. The mobile player scans the QR and automatically downloads the note timeline. As soon as the download completes, **Which notes will you play?** appears. Choose notes and tap **READY**.
+5. Master presses Play: a signed command tells all phones to start at a shared future master time. Each phone draws its own notes locally; realtime messages are only for playback controls and occasional synchronization. Playback continues offline after the initial Play command, but offline phones cannot receive new Pause/Seek instructions.
+6. Mobile **RECONNECT** restores the session without another download if the cached song version has not changed.
 
-Keep the laptop session open while players are connected. A restrictive network may still require TURN configuration; using the same reliable Wi-Fi is recommended for performances.
+The room displays a target capacity of **50 players + 1 master**, with a soft admission guard on the master. Hosting and signing use a per-session P-256 key; only signed master broadcasts can control playback. Phones use the QR's public verification key. This does not replace proper access control for adversarial or public open rooms: public Realtime topics still permit other clients to subscribe and send messages, so enable rate limiting/auth protection for a public launch.
+
+**Important:** 50-player synchronization is an engineering target, not a measured guarantee. Before a live performance, test on the expected Wi-Fi and cellular networks with progressively more devices (5, 10, 25, 50). The largest sources of variation will be latency and browser background throttling. Keep phones awake and the master's browser open. If you only see “Realtime not configured”, the two Vercel variables above have not been set.
+
+See [Supabase Realtime Broadcast](https://supabase.com/docs/guides/realtime/broadcast), [Protocol](https://supabase.com/docs/guides/realtime/protocol) and [Limits](https://supabase.com/docs/guides/realtime/limits). The free Realtime tier currently lists 200 concurrent connections, but check the current plan and quotas before events.
 
 ## Audio notes
 
