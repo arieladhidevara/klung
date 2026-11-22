@@ -16,7 +16,9 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
   endpoint.searchParams.set('vsn','1.0.0');
   const topic='realtime:klung-'+code.toLowerCase();
   const upstreamTopic='realtime:klung-master-'+code.toLowerCase();
-  const topics=role==='master'?[topic,upstreamTopic]:[topic];
+  // A dedicated subscriber topic per phone keeps bulk song data off other phones.
+  const directTopic=role==='mobile'?'realtime:klung-phone-'+code.toLowerCase()+'-'+clientId.toLowerCase():null;
+  const topics=role==='master'?[topic,upstreamTopic]:[topic,directTopic];
   let socket=null,closed=false,ready=false,ref=0,joinRef='',heartbeat=null,retry=null,attempt=0;
   const pendingJoins=new Map();
   let presence={},desiredPresence={id:clientId},everReady=false;
@@ -32,22 +34,27 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
     socket.send(JSON.stringify({topic:channel,event,payload,ref:String(++ref),join_ref:replyRef||undefined}));
     return true;
   }
+  async function postBroadcast(channel,packet){
+    try{
+      const response=await fetch(base.replace(/\/$/,'')+'/realtime/v1/api/broadcast',{
+        method:'POST',
+        headers:{apikey:key,'Content-Type':'application/json'},
+        body:JSON.stringify({messages:[{
+          topic:channel.replace(/^realtime:/,''),event:'klung',
+          payload:packet,private:false
+        }]}),
+        signal:AbortSignal.timeout(8000)
+      });
+      if(!response.ok)throw new Error('Realtime relay rejected '+packet.kind+' ('+response.status+')');
+      return true;
+    }catch(error){console.warn(error);onError?.(error.message);return false}
+  }
   function emit(kind,payload={}){
     if(!ready)return false;
     const packet={kind,...payload};
     if(role==='master')return push('broadcast',{type:'broadcast',event:'klung',payload:packet});
-    // Phone -> master uses a REST broadcast channel subscribed to ONLY by the master.
-    fetch(base.replace(/\/$/,'')+'/realtime/v1/api/broadcast',{
-      method:'POST',
-      headers:{apikey:key,'Content-Type':'application/json'},
-      body:JSON.stringify({messages:[{
-        topic:upstreamTopic.replace(/^realtime:/,''),event:'klung',
-        payload:packet,private:false
-      }]}),
-      signal:AbortSignal.timeout(8000)
-    }).then(response=>{
-      if(!response.ok)throw new Error('Master relay rejected '+kind+' ('+response.status+')');
-    }).catch(error=>{console.warn(error);onError?.(error.message)});
+    // Phone -> master is addressed to the upstream-only subscription.
+    void postBroadcast(upstreamTopic,packet);
     return true;
   }
   function presenceList(){
@@ -101,9 +108,9 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
         }
         return;
       }
-      if(msg.topic!==topic&&msg.topic!==upstreamTopic)return;
+      if(msg.topic!==topic&&msg.topic!==upstreamTopic&&msg.topic!==directTopic)return;
       if(msg.event==='broadcast'&&msg.payload?.event==='klung'){
-        if(role==='master'||msg.topic===topic)onEvent?.(msg.payload.payload);
+        if(role==='master'||msg.topic===topic||msg.topic===directTopic)onEvent?.(msg.payload.payload);
       }else if(msg.topic===topic&&msg.event==='presence_state'){
         presence=msg.payload||{};
         notifyPresence();
@@ -140,6 +147,11 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
     connected:()=>ready,
     firstConnection,
     send:emit,
+    // Only the addressed phone subscribes to this topic. Control messages still use send().
+    sendDirect(kind,payload,recipient){
+      if(role!=='master'||!ready||typeof recipient!=='string'||!/^[a-f0-9-]{36}$/i.test(recipient))return Promise.resolve(false);
+      return postBroadcast('realtime:klung-phone-'+code.toLowerCase()+'-'+recipient.toLowerCase(),{kind,...payload});
+    },
     setPresence(meta){desiredPresence={id:clientId,...meta};if(ready)push('presence',{type:'presence',event:'track',payload:desiredPresence})},
     getPresence:presenceList,
     reconnect(){if(closed)return;socket?.close();if(!socket||socket.readyState===WebSocket.CLOSED){clearJobs();open()}},
