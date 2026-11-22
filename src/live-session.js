@@ -2,6 +2,7 @@ import { cueLabel } from './cue-label.js';
 import QRCode from 'qrcode';
 import {createRealtimeHub,realtimeConfigured} from './realtime-hub.js';
 import {sessionRoute,newSessionCode,sessionUrl,findSessionMaster,isFourDigitCode} from './session-routing.js';
+import {deliverSnapshotWithFallback} from './snapshot-delivery.js';
 
 const MAX_PLAYERS=50,CHUNK_SIZE=40000;
 const $=selector=>document.querySelector(selector);
@@ -347,28 +348,19 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
         target:id,transferId,version,index,total,
         chunk:serialized.slice(index*CHUNK_SIZE,(index+1)*CHUNK_SIZE)
       }));
-      for(const packet of chunks){
-        if(!liveConnected()||!peers.has(id))return false;
-        if(snapshotVersion!==version)return true;
-        // Fast path: only this phone subscribes to the targeted topic.
-        await sendFromMaster('snapshot-chunk',packet,id);
-        if(total>1)await wait(60);
-      }
-      // HTTP 202 means Supabase accepted a request, NOT that a phone got it.
-      // Require an application-layer ACK before considering the download done.
-      if(!await waitForReceipt(transfer,2400)){
-        if(!liveConnected()||!peers.has(id)||snapshotVersion!==version)return false;
-        // Delivery fallback: public room broadcasts once to the addressed ID.
-        // Other phones ignore this signed, targeted packet.
-        for(const packet of chunks){
-          if(!liveConnected()||snapshotVersion!==version)return false;
-          await sendFromMaster('snapshot-chunk',packet);
-          if(total>1)await wait(60);
-        }
-        if(!await waitForReceipt(transfer,3000)){
-          console.warn('Phone did not acknowledge song download',id);
-          return false; // The retry queue handles temporary packet loss.
-        }
+      // HTTP 202 only means Supabase accepted the request. Use an ACK from
+      // the phone, and fall back to the room topic if targeted delivery stalls.
+      const delivery=await deliverSnapshotWithFallback({
+        packets:chunks,
+        sendTargeted:packet=>sendFromMaster('snapshot-chunk',packet,id),
+        sendFallback:packet=>sendFromMaster('snapshot-chunk',packet),
+        waitForReceipt:timeout=>waitForReceipt(transfer,timeout),
+        isValid:()=>liveConnected()&&peers.has(id)&&snapshotVersion===version,
+        pause:()=>wait(60)
+      });
+      if(!delivery.ok){
+        console.warn('Phone did not acknowledge song download',id);
+        return false; // The retry queue handles temporary packet loss.
       }
       if(snapshotVersion===version)await sendCurrentTransport([id]);
       return true;
