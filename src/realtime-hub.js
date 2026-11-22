@@ -20,7 +20,7 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
   let socket=null,closed=false,ready=false,ref=0,joinRef='',heartbeat=null,retry=null,attempt=0;
   const pendingJoins=new Map();
   let presence={},desiredPresence={id:clientId},everReady=false;
-  let initialResolve,initialReject,firstAttemptDone=false;
+  let initialResolve,initialReject,firstAttemptDone=false,initialTimer=null;
   const firstConnection=new Promise((resolve,reject)=>{initialResolve=resolve;initialReject=reject});
   function clearJobs(){
     if(heartbeat)clearInterval(heartbeat);
@@ -68,7 +68,6 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
     ws.onopen=()=>{
       for(const channel of topics){
         const joinToken=String(++ref);
-        pendingJoins.set(joinToken,channel);
         if(channel===topic)joinRef=joinToken;
         push('phx_join',{
           config:{
@@ -77,6 +76,8 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
             postgres_changes:[],private:false
           }
         },channel,joinToken);
+        // Match the reply against the actual outgoing message ref, not join_ref.
+        pendingJoins.set(String(ref),channel);
       }
       heartbeat=setInterval(()=>push('heartbeat',{},'phoenix',null),20000);
     };
@@ -90,7 +91,7 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
           if(pendingJoins.size===0){
             ready=true;everReady=true;attempt=0;
             push('presence',{type:'presence',event:'track',payload:desiredPresence});
-            if(!firstAttemptDone){firstAttemptDone=true;initialResolve(true)}
+            if(!firstAttemptDone){firstAttemptDone=true;clearTimeout(initialTimer);initialResolve(true)}
             onReady?.();
           }
         }else{
@@ -134,7 +135,7 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
   }
   open();
   // Caller sees an actionable failure, while background reconnect remains enabled.
-  setTimeout(()=>{if(!firstAttemptDone){firstAttemptDone=true;initialReject(new Error('Realtime connection timed out. Check network and Supabase settings.'))}},12000);
+  initialTimer=setTimeout(()=>{if(!firstAttemptDone){firstAttemptDone=true;initialReject(new Error('Realtime connection timed out. Check network and Supabase settings.'))}},12000);
   return {
     connected:()=>ready,
     firstConnection,
@@ -142,6 +143,6 @@ export function createRealtimeHub({code,clientId,role,onReady,onEvent,onPresence
     setPresence(meta){desiredPresence={id:clientId,...meta};if(ready)push('presence',{type:'presence',event:'track',payload:desiredPresence})},
     getPresence:presenceList,
     reconnect(){if(closed)return;socket?.close();if(!socket||socket.readyState===WebSocket.CLOSED){clearJobs();open()}},
-    close(){closed=true;ready=false;clearJobs();socket?.close();socket=null}
+    close(){closed=true;ready=false;clearJobs();clearTimeout(initialTimer);socket?.close();socket=null}
   };
 }
