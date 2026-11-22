@@ -41,6 +41,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   let mobileFrame=0,mobileLastFrame=0,wakeLock=null,joining=false;
   let transportSeq=0,lastSeq=0,lastSyncAt=0,pendingTransport=null,masterTransport=null;
   let download=null,downloadQueue=new Set(),downloadTimer=null,clockTimer=null;
+  let flushingSnapshots=false,expectedSnapshotVersion='';
   const peers=new Map(),pendingPings=new Map(),leaveTimers=new Map();
   let onlinePresence=new Set();
   const mobileTimeline=$('#mobileTimeline'),mobileTimelineContext=mobileTimeline?.getContext('2d');
@@ -85,12 +86,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#mobileReconnect').hidden=false;
     }else $('#info').textContent=message;
   }
-  async function sendFromMaster(kind,data={}){
+  async function sendFromMaster(kind,data={},recipient=null){
     if(!liveConnected()||!signer)return false;
     const unsigned={kind,source:clientId,...data};
     const bytes=encoder.encode(JSON.stringify(unsigned));
     const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},signer,bytes);
-    return room.send(kind,{...unsigned,signature:toBase64Url(new Uint8Array(signature))});
+    const signed={...unsigned,signature:toBase64Url(new Uint8Array(signature))};
+    return recipient?room.sendDirect(kind,signed,recipient):room.send(kind,signed);
   }
   async function verifyFromMaster(data){
     if(!verifier||typeof data?.signature!=='string'||!data.source)return false;
@@ -106,7 +108,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     return room?.send(kind,{...data,source:clientId})===true;
   }
   function sayHello(){
-    const isReady=Boolean(snapshot&&mobileSelection.size&&!$('#mobileCue').hidden);
+    const isReady=Boolean(mobileSelection.size&&(snapshot||expectedSnapshotVersion));
     sendFromPlayer('hello',{
       version:snapshotVersion||null,device:'Mobile player',
       pitches:isReady?[...mobileSelection]:[]
@@ -167,6 +169,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     }else{
       $('#info').textContent='Live session connected. Players can scan the QR.';
       renderMasterPlayers();
+      if(downloadQueue.size)queueSnapshotFlush();
     }
   }
   function onDisconnect(){
@@ -225,6 +228,19 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     if(role!=='mobile'||!await verifyFromMaster(data))return;
     if(data.target&&data.target!==clientId&&!Array.isArray(data.target))return;
     if(Array.isArray(data.target)&&!data.target.includes(clientId))return;
+    if(data.kind==='snapshot-updated'){
+      if(typeof data.version!=='string'||!data.version||
+         data.version===snapshotVersion||data.version===expectedSnapshotVersion)return;
+      // A new song replaces the cached notes, but players keep their assigned pitches.
+      expectedSnapshotVersion=data.version;
+      snapshot=null;download=null;pendingTransport=null;clockSamples=[];
+      mobileTransport={playing:false,position:0,executeAt:0,playbackRate:1,status:'Updating song'};
+      $('#mobileCue').hidden=true;$('#mobileNotePicker').hidden=true;$('#mobileConnect').hidden=false;
+      $('#mobileConnectTitle').textContent='Updating song…';
+      $('#mobileConnectText').textContent='Downloading the latest notes for this phone.';
+      sayHello(); // Request the new version; the master will reply privately.
+      return;
+    }
     if(data.kind==='snapshot-chunk'){
       receiveChunk(data);return;
     }
