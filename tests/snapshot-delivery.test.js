@@ -58,3 +58,15 @@ test('fails gracefully if room cannot publish fallback',async()=>{
   });
   assert.deepEqual(result,{ok:false,usedFallback:true});
 });
+
+test('rejected direct request immediately uses the fallback without waiting for 202',async()=>{
+  let waitCalls=0,shared=0;
+  const result=await deliverSnapshotWithFallback({
+    packets,sendTargeted:async()=>false,
+    sendFallback:async()=>{shared++;return true},
+    waitForReceipt:async()=>{waitCalls++;return true},isValid:()=>true
+  });
+  assert.deepEqual(result,{ok:true,usedFallback:true});
+  assert.equal(shared,1);
+  assert.equal(waitCalls,1);
+});
