@@ -61,7 +61,7 @@ npm run build
 
 ## Mobile player sessions (master + up to 50 phones)
 
-The live room uses **a hosted Supabase Realtime relay, not WebRTC peer-to-peer**. Every phone only subscribes to a session-wide master broadcast; phones do **not** connect to one another. Phone-to-master HELLO, READY and clock pings use a separate upstream Realtime topic subscribed to by the master only.
+The live room uses **a hosted Supabase Realtime relay, not WebRTC peer-to-peer**. Every phone subscribes to the session-wide control broadcast **and to one per-phone song-transfer topic**; phones do **not** connect to one another. The master sends Play, Pause, Stop/Seek, playback speed, and lightweight **song-updated** notifications to everyone, but sends the large note-timeline chunks only to the phone that requested them. When the master loads a new song or saves edited notes, each phone requests and downloads the new version individually (assigned pitches are preserved). A reconnecting phone with the same song version does not re-download it. Phone-to-master HELLO, READY and clock pings use a separate upstream Realtime topic subscribed to by the master only.
 
 1. Configure a dedicated Supabase project for Klung! (recommended, rather than sharing production credentials with another app).
 2. Set these **public/publishable** Vercel environment variables (for Preview and Production when ready):
