@@ -65,8 +65,7 @@ test('Vercel SPA deep links serve index.html using official Vite catch-all',asyn
   const rules=config.rewrites.filter(({destination})=>destination==='/index.html');
   assert.ok(rules.length>0);
   for(const path of ['/joinsession','/1234','/0007','/join','/']){
-    assert.ok(rules.some(({source})=>new RegExp('^'+source+'
-).test(path)),
+    assert.ok(rules.some(({source})=>new RegExp('^'+source).test(path)),
       'Deep link '+path+' must resolve to SPA index.html');
   }
 });
