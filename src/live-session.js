@@ -130,6 +130,10 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
   function onPresence(list){
     if(role==='master'){
+      // A four-digit code can collide with an existing live master. Never play over
+      // somebody else's room. Tell the host to end and generate a fresh code.
+      masterCodeConflict=list.some(p=>p.role==='master'&&p.id!==clientId);
+      if(masterCodeConflict)$('#info').textContent='This session code is already in use. End the session and start another one.';
       onlinePresence=new Set(list.filter(p=>p.role==='mobile'&&typeof p.id==='string').map(p=>p.id));
       for(const [id] of peers){
         if(onlinePresence.has(id)){
@@ -145,9 +149,38 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
         }
       }
       renderMasterPlayers();
-    }else if(masterId&&!list.some(p=>p.role==='master'&&p.id===masterId)){
-      // The music remains cached locally; only remote controls are unavailable.
-      if(!$('#mobileCue').hidden&&!mobileTransport.playing)setMobileStatus('MASTER OFFLINE',true);
+    }else if(role==='mobile'){
+      const discovered=findSessionMaster(list);
+      if(discovered.status==='conflict'){
+        // Multiple masters sharing a short code is ambiguous: reject, never guess.
+        masterCodeConflict=true;
+        showConnectionError('Two masters are using this code. Ask the master to start a new session.');
+        return;
+      }
+      if(discovered.status==='found'){
+        if((sessionPublicKey&&discovered.key!==sessionPublicKey)||
+           (masterId&&discovered.id!==masterId)){
+          masterCodeConflict=true;
+          showConnectionError('The session code is now used by a different master. Request a new code.');
+          return;
+        }
+        if(!verifier&&!verifyingMaster&&!masterCodeConflict){
+          verifyingMaster=true;masterId=discovered.id;sessionPublicKey=discovered.key;
+          void createVerifier(discovered.key).then(key=>{
+            if(role!=='mobile'||masterCodeConflict)return;
+            verifier=key;
+            if(liveConnected()){
+              $('#mobileConnectTitle').textContent='Connected · loading song…';
+              $('#mobileConnectText').textContent='Downloading notes from the master.';
+              sayHello();
+            }
+          }).catch(error=>showConnectionError('Invalid master session key: '+error.message))
+            .finally(()=>{verifyingMaster=false});
+        }
+      }else if(masterId){
+        // Song stays cached locally, but the host's controls are offline.
+        if(!$('#mobileCue').hidden&&!mobileTransport.playing)setMobileStatus('MASTER OFFLINE',true);
+      }
     }
   }
   function onReady(){
