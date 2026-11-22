@@ -31,7 +31,7 @@ test('Existing signed QR URLs still open the legacy /join player',()=>{
 });
 
 test('Master generates uniformly mapped four-digit codes including leading zeroes',()=>{
-  for(const n of [0,1,42,9999,10000,19999,4294960000]){
+  for(const n of [0,1,42,9999,10000,19999,4294959999]){
     const code=newSessionCode(array=>{array[0]=n;return array});
     assert.equal(code.length,4);
     assert.match(code,/^[0-9]{4}$/);
