@@ -1,17 +1,14 @@
 import { cueLabel } from './cue-label.js';
 import QRCode from 'qrcode';
 import {createRealtimeHub,realtimeConfigured} from './realtime-hub.js';
+import {sessionRoute,newSessionCode,sessionUrl,findSessionMaster,isFourDigitCode} from './session-routing.js';
 
 const MAX_PLAYERS=50,CHUNK_SIZE=40000;
 const $=selector=>document.querySelector(selector);
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const encoder=new TextEncoder();
 const randomId=()=>crypto.randomUUID();
-function randomCode(){
-  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',bytes=new Uint8Array(8);
-  crypto.getRandomValues(bytes);
-  return [...bytes].map(n=>alphabet[n%alphabet.length]).join('');
-}
+
 function toBase64Url(bytes){
   let s='';for(const n of bytes)s+=String.fromCharCode(n);
   return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
@@ -32,10 +29,11 @@ async function createVerifier(key){
 }
 
 export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPlaying,onMasterPlay,noteNames,noteColors,noteInk,allPitches}){
-  const params=new URLSearchParams(location.search),joinCode=(params.get('session')||'').trim().toUpperCase(),joinKey=params.get('key')||'';
-  const isMobile=Boolean(joinCode)&&(location.pathname.replace(/\/+$/,'')==='/join'||params.has('mobile'));
+  const route=sessionRoute(location.pathname,location.search),joinCode=route.code,joinKey=route.key;
+  const isMobile=route.isPlayer,isJoinPage=route.isJoinPage;
   const clientId=randomId();
   let role=isMobile?'mobile':null,room=null,code='',signer=null,publicKey='',verifier=null;
+  let sessionPublicKey=joinKey,verifyingMaster=false,masterCodeConflict=false;
   let snapshot=null,snapshotVersion='',masterId=null,clockOffset=0,clockSamples=[],mobileSelection=new Set();
   let mobileTransport={playing:false,position:0,executeAt:0,playbackRate:1,status:'Waiting for master'};
   let mobileFrame=0,mobileLastFrame=0,wakeLock=null,joining=false;
@@ -49,7 +47,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   const liveConnected=()=>room?.connected()===true;
   // A returning player keeps their Ready selection for this exact QR/session.
   // No account is needed. A new QR/public key cannot accidentally reuse it.
-  const savedNotesKey=()=>`klung:ready:v1:${joinCode}:${joinKey}`;
+  const savedNotesKey=()=>`klung:ready:v1:${joinCode}:${sessionPublicKey}`;
   function savedNotes(){
     try{
       const record=JSON.parse(localStorage.getItem(savedNotesKey())||'null');
@@ -74,11 +72,7 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     return mobileSelection.size>0;
   }
 
-  function joinUrl(sessionCode,key){
-    const url=new URL('/join',location.origin);
-    url.searchParams.set('session',sessionCode);url.searchParams.set('mobile','1');url.searchParams.set('key',key);
-    return url.toString();
-  }
+  function joinUrl(sessionCode){return sessionUrl(location.origin,sessionCode)}
   function showConnectionError(message){
     if(role==='mobile'){
       $('#mobileConnect').hidden=false;$('#mobileNotePicker').hidden=true;$('#mobileCue').hidden=true;
@@ -115,14 +109,15 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     });
   }
   function updateOwnPresence(){
-    room?.setPresence({id:clientId,role,ready:Boolean(mobileSelection.size)&&!$('#mobileCue').hidden,
+    room?.setPresence({id:clientId,role,publicKey:role==='master'?publicKey:undefined,
+      ready:Boolean(mobileSelection.size)&&!$('#mobileCue').hidden,
       pitches:[...mobileSelection].slice(0,12)});
   }
   function renderMasterPlayers(){
     const online=[...peers.values()];
     const ready=online.filter(p=>p.ready).length;
     $('#livePlayerCount').textContent=online.length+'/'+MAX_PLAYERS+' connected · '+ready+' ready';
-    $('#liveSessionPlay').disabled=false;
+    $('#liveSessionPlay').disabled=masterCodeConflict;
     const list=$('#livePlayerList');
     if(!online.length){list.innerHTML='<small>Waiting for players…</small>';return}
     list.replaceChildren(...online.map(player=>{
@@ -135,6 +130,10 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   }
   function onPresence(list){
     if(role==='master'){
+      // A four-digit code can collide with an existing live master. Never play over
+      // somebody else's room. Tell the host to end and generate a fresh code.
+      masterCodeConflict=list.some(p=>p.role==='master'&&p.id!==clientId);
+      if(masterCodeConflict)$('#info').textContent='This session code is already in use. End the session and start another one.';
       onlinePresence=new Set(list.filter(p=>p.role==='mobile'&&typeof p.id==='string').map(p=>p.id));
       for(const [id] of peers){
         if(onlinePresence.has(id)){
@@ -150,9 +149,38 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
         }
       }
       renderMasterPlayers();
-    }else if(masterId&&!list.some(p=>p.role==='master'&&p.id===masterId)){
-      // The music remains cached locally; only remote controls are unavailable.
-      if(!$('#mobileCue').hidden&&!mobileTransport.playing)setMobileStatus('MASTER OFFLINE',true);
+    }else if(role==='mobile'){
+      const discovered=findSessionMaster(list);
+      if(discovered.status==='conflict'){
+        // Multiple masters sharing a short code is ambiguous: reject, never guess.
+        masterCodeConflict=true;
+        showConnectionError('Two masters are using this code. Ask the master to start a new session.');
+        return;
+      }
+      if(discovered.status==='found'){
+        if((sessionPublicKey&&discovered.key!==sessionPublicKey)||
+           (masterId&&discovered.id!==masterId)){
+          masterCodeConflict=true;
+          showConnectionError('The session code is now used by a different master. Request a new code.');
+          return;
+        }
+        if(!verifier&&!verifyingMaster&&!masterCodeConflict){
+          verifyingMaster=true;masterId=discovered.id;sessionPublicKey=discovered.key;
+          void createVerifier(discovered.key).then(key=>{
+            if(role!=='mobile'||masterCodeConflict)return;
+            verifier=key;
+            if(liveConnected()){
+              $('#mobileConnectTitle').textContent='Connected · loading song…';
+              $('#mobileConnectText').textContent='Downloading notes from the master.';
+              sayHello();
+            }
+          }).catch(error=>showConnectionError('Invalid master session key: '+error.message))
+            .finally(()=>{verifyingMaster=false});
+        }
+      }else if(masterId){
+        // Song stays cached locally, but the host's controls are offline.
+        if(!$('#mobileCue').hidden&&!mobileTransport.playing)setMobileStatus('MASTER OFFLINE',true);
+      }
     }
   }
   function onReady(){
@@ -161,7 +189,11 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#mobileConnectTitle').textContent='Connected · loading song…';
       $('#mobileConnectText').textContent='Downloading the note timeline once.';
       $('#mobileReconnect').hidden=true;
-      sayHello();
+      if(verifier)sayHello();
+      else {
+        $('#mobileConnectTitle').textContent='Finding master…';
+        $('#mobileConnectText').textContent='Looking for the host of room '+joinCode+'.';
+      }
       if(snapshot){
         if(mobileSelection.size){$('#mobileConnect').hidden=true;$('#mobileCue').hidden=false}
         void startClockSync();
@@ -387,12 +419,12 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
       $('#info').textContent='Klung Realtime not configured. Set the two Vercel Supabase public variables.';
       return;
     }
-    joining=true;role='master';code=randomCode();snapshotVersion=randomId();
+    joining=true;role='master';code=newSessionCode();snapshotVersion=randomId();masterCodeConflict=false;
     try{
       const credentials=await createMasterKey();signer=credentials.signer;publicKey=credentials.publicKey;
       await connect(code);
-      const url=joinUrl(code,publicKey);
-      $('#liveSessionCode').textContent=code.slice(0,4)+' '+code.slice(4);
+      const url=joinUrl(code);
+      $('#liveSessionCode').textContent=code;
       $('#liveSessionLink').value=url;
       $('#liveSessionModal').hidden=false;$('#hostSession').classList.add('active');
       $('#hostSession').innerHTML='<span>●</span> LIVE';
@@ -411,12 +443,13 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     leaveTimers.clear();onlinePresence.clear();
     if(downloadTimer)clearTimeout(downloadTimer);
     if(clockTimer)clearTimeout(clockTimer);
-    role=isMobile?'mobile':null;
+    role=isMobile?'mobile':null;masterCodeConflict=false;
     $('#liveSessionModal').hidden=true;
     $('#hostSession')?.classList.remove('active');
     if($('#hostSession'))$('#hostSession').innerHTML='<span>⌁</span> MOBILE';
   }
   function preparePlay(position){
+    if(masterCodeConflict)return {blocked:true,message:'Session code is also used by another master. End this room and start a new one.'};
     if(!liveConnected()||role!=='master'||!peers.size)return null;
     const executeAt=Date.now()+3500;
     masterTransport={command:'play',position,executeAt,
@@ -533,11 +566,11 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
     document.body.classList.add('mobile-player-mode');
     $('#mobilePlayer').hidden=false;$('#mobileReady').onclick=readyMobile;
     $('#mobileReconnect').onclick=()=>{room?.reconnect();$('#mobileReconnect').hidden=true};
-    if(!joinCode||!joinKey){showConnectionError('Session link is incomplete. Please scan the QR on the master again.');return}
+    if(!joinCode){showConnectionError('Invalid session code. Enter the four-digit code shown by the master.');return}
     if(!realtimeConfigured()){showConnectionError('Realtime relay has not been configured on this deployment.');return}
     role='mobile';code=joinCode;
     try{
-      verifier=await createVerifier(joinKey);
+      if(joinKey)verifier=await createVerifier(joinKey);
       await connect(joinCode);
     }catch(error){
       showConnectionError('Connection failed: '+(error?.message||error));
@@ -564,6 +597,28 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   $('#liveSessionCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#liveSessionLink').value);$('#liveSessionCopy').textContent='COPIED';setTimeout(()=>$('#liveSessionCopy').textContent='COPY',1200)}catch{}}
   $('#liveSessionPlay').onclick=()=>onMasterPlay();
   $('#hostSession').onclick=host;
+  if(isJoinPage){
+    document.body.classList.add('join-session-mode');
+    $('#joinSessionPage').hidden=false;
+    const input=$('#joinSessionCode'),error=$('#joinSessionError');
+    input.addEventListener('input',()=>{
+      const digits=input.value.replace(/[^0-9]/g,'').slice(0,4);
+      if(input.value!==digits)input.value=digits;
+      error.textContent='';
+    });
+    $('#joinSessionForm').addEventListener('submit',event=>{
+      event.preventDefault();
+      const value=input.value.trim();
+      if(!isFourDigitCode(value)){
+        error.textContent='Enter exactly 4 numbers to join.';
+        input.focus();
+        return;
+      }
+      // Same path used by the master QR. The player discovers the master key
+      // through live Presence; no extra URL parameters are required.
+      location.assign(sessionUrl(location.origin,value));
+    });
+  }
   if(isMobile)void initMobile();
 
   return {isMobile,host,end,preparePlay,broadcastPause,broadcastSeek,broadcastSync,refresh,show:()=>{$('#liveSessionModal').hidden=false},isHosting:()=>Boolean(room&&role==='master')};

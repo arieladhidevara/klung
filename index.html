@@ -157,8 +157,8 @@
     <div class="live-session-card">
       <button id="liveSessionClose" class="live-session-close" type="button" aria-label="Close">×</button>
       <span class="live-session-kicker">MASTER SESSION</span>
-      <h2 id="liveSessionTitle">Scan to join</h2>
-      <p>Up to 50 phones can join. Each downloads the note timeline once; only master controls are sent live.</p>
+      <h2 id="liveSessionTitle">Scan or enter the code</h2>
+      <p>Scan the QR to join instantly, or open /joinsession and enter the 4-digit code. Supports up to 50 phones.</p>
       <canvas id="liveSessionQr" width="260" height="260" aria-label="Mobile join QR code"></canvas>
       <strong id="liveSessionCode" class="live-session-code">—— ——</strong>
       <div class="live-session-link-row"><input id="liveSessionLink" readonly aria-label="Mobile join link" /><button id="liveSessionCopy" type="button">COPY</button></div>
@@ -185,6 +185,22 @@
     <div class="mobile-cue" id="mobileCue" hidden>
       <canvas id="mobileTimeline" class="mobile-cue-timeline" aria-label="Selected notes in the performance"></canvas>
       <div class="mobile-cue-status"><span id="mobileCueDot"></span><strong id="mobileCueStatus">WAITING FOR MASTER</strong></div>
+    </div>
+  </section>
+  <section class="join-session-page" id="joinSessionPage" hidden aria-labelledby="joinSessionHeading">
+    <div class="join-session-card">
+      <span class="mobile-brand">KLUNG!</span>
+      <span class="join-session-eyebrow">JOIN A LIVE SESSION</span>
+      <h1 id="joinSessionHeading">Enter session code</h1>
+      <p>Enter the 4-digit code shown on the master's screen.</p>
+      <form id="joinSessionForm">
+        <label for="joinSessionCode">SESSION CODE</label>
+        <input id="joinSessionCode" name="code" inputmode="numeric" type="text"
+          pattern="[0-9]{4}" maxlength="4" autocomplete="off"
+          placeholder="0000" aria-describedby="joinSessionError" required />
+        <p id="joinSessionError" role="status" aria-live="polite"></p>
+        <button type="submit">JOIN SESSION →</button>
+      </form>
     </div>
   </section>
   <audio id="audio" preload="metadata"></audio>
