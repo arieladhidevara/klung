@@ -59,10 +59,13 @@ test('Player discovers a unique master key and rejects ambiguous codes',()=>{
   assert.deepEqual(findSessionMaster([master],'key-B'),{status:'waiting'});
 });
 
-test('Vercel serves both clean room URL and manual join form as SPA paths',async()=>{
+test('Vercel SPA deep links serve index.html using official Vite catch-all',async()=>{
   const config=JSON.parse(await readFile(new URL('../vercel.json',import.meta.url),'utf8'));
-  assert.ok(config.rewrites.some(({source,destination})=>
-    source==='/joinsession'&&destination==='/index.html'));
-  assert.ok(config.rewrites.some(({source,destination})=>
-    source.includes('[0-9]{4}')&&destination==='/index.html'));
+  assert.equal(config.cleanUrls,false);
+  const rules=config.rewrites.filter(({destination})=>destination==='/index.html');
+  assert.ok(rules.length>0);
+  for(const path of ['/joinsession','/1234','/0007','/join','/']){
+    assert.ok(rules.some(({source})=>new RegExp('^'+source).test(path)),
+      'Deep link '+path+' must resolve to SPA index.html');
+  }
 });

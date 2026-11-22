@@ -1,15 +1,9 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": false,
   "rewrites": [
     {
-      "source": "/join",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/joinsession",
-      "destination": "/index.html"
-    },
-    {
-      "source": "^/([0-9]{4})$",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
