@@ -597,6 +597,28 @@ export function createLiveSession({getSnapshot,getPosition,getPlaybackRate,isPla
   $('#liveSessionCopy').onclick=async()=>{try{await navigator.clipboard.writeText($('#liveSessionLink').value);$('#liveSessionCopy').textContent='COPIED';setTimeout(()=>$('#liveSessionCopy').textContent='COPY',1200)}catch{}}
   $('#liveSessionPlay').onclick=()=>onMasterPlay();
   $('#hostSession').onclick=host;
+  if(isJoinPage){
+    document.body.classList.add('join-session-mode');
+    $('#joinSessionPage').hidden=false;
+    const input=$('#joinSessionCode'),error=$('#joinSessionError');
+    input.addEventListener('input',()=>{
+      const digits=input.value.replace(/[^0-9]/g,'').slice(0,4);
+      if(input.value!==digits)input.value=digits;
+      error.textContent='';
+    });
+    $('#joinSessionForm').addEventListener('submit',event=>{
+      event.preventDefault();
+      const value=input.value.trim();
+      if(!isFourDigitCode(value)){
+        error.textContent='Enter exactly 4 numbers to join.';
+        input.focus();
+        return;
+      }
+      // Same path used by the master QR. The player discovers the master key
+      // through live Presence; no extra URL parameters are required.
+      location.assign(sessionUrl(location.origin,value));
+    });
+  }
   if(isMobile)void initMobile();
 
   return {isMobile,host,end,preparePlay,broadcastPause,broadcastSeek,broadcastSync,refresh,show:()=>{$('#liveSessionModal').hidden=false},isHosting:()=>Boolean(room&&role==='master')};
